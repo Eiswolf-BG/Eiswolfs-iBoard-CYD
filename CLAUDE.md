@@ -1369,8 +1369,79 @@ unberührt).
       ohne Fehler, CYD-IP sofort per WLAN gelernt. Menü selbst (Sprach-/
       Einheiten-Umschaltung in der laufenden App) noch NICHT einzeln
       von Alex am echten Menü durchgeklickt.
-- [ ] **Ausstehend:** Mac-App-DMG neu bauen (Alex hat das selbst schon
-      angekündigt: "muss noch mal neu kompiliert werden") - noch nicht
-      gemacht, da sie das Menü vermutlich erst selbst in der
-      Entwicklungskopie/laufenden App sehen möchte, bevor ein neues DMG
-      gebaut wird. CYD-Seite ist bereits geflasht und einsatzbereit.
+- [x] **DMG neu gebaut** (Alex hat das englische Menü live am Gerät
+      bestätigt, danach grünes Licht für v1.0 gegeben): Mac-App-interne
+      `APP_VERSION` in `mac/sender.py`/`mac/eiswolfs_iboard.spec` von
+      "1.1" auf "1.0" gesetzt (erster öffentlicher Release, eigene
+      Zählung unabhängig von der fortlaufenden Entwickler-Build-Nummer
+      davor). `pyinstaller` gebaut, ad-hoc signiert
+      (`codesign --verify`: "valid on disk"), `dist/Eiswolfs-iBoard.dmg`
+      neu erstellt (~11 MB). Token-Leak-Check (echten Token aus
+      `~/Library/Application Support/.../config.json` gelesen, NIE
+      angezeigt, nur per `grep -c` auf 0 Treffer geprüft) in App-Bundle
+      UND DMG: beide 0 Treffer.
+- [x] **Öffentliches GitHub-Repo `Eiswolfs-iBoard-CYD` erstellt und
+      released (02./03.11.)**: Alex hat explizit "ja alles sieht gut
+      aus... dann können wir v1.0 pushen" gesagt (nach Live-Test des
+      englischen Menüs am Gerät) sowie "Kann man beides CYD und Macapp
+      über webflasher anbieten?" gefragt.
+      - Drei Galerie-Fotos von Alex nach `docs/images/` umbenannt
+        (`menu.jpg`=Englisches Menü, `fan-boost.jpg`=Boost aktiv,
+        `device.jpg`=Gerät auf dem Tisch), `docs/gallery.md` mit allen
+        vier Bildern (inkl. vorhandenem `main.jpg`) befüllt. **Wichtig:**
+        ein zusätzliches, zwischendurch gesendetes Solar-Guardian-Foto
+        war ein Versehen ("sorry das foto gehört raus") - NICHT in
+        dieses Projekt übernommen.
+      - **Eigener Web-Flasher** nach dem Vorbild von Flightradar/Solar
+        Guardian gebaut (ESP Web Tools `esp-web-install-button`):
+        `index.html` (Cyan/Eis-Theme, zwei Abschnitte - CYD-Flash-Button
+        UND Mac-App-Download-Button) + `manifest.json` +
+        `bootloader.bin`/`partitions.bin`/`firmware.bin` (UNGEMERGT,
+        Standard-Offsets 0x1000/0x8000/0x10000) liegen im Repo-Root,
+        über GitHub Pages ausgeliefert unter
+        `https://eiswolf-bg.github.io/Eiswolfs-iBoard-CYD/` (Pages per
+        `gh api .../pages` aktiviert, `source.branch=main`,
+        `source.path=/`). Live geprüft: Seite lädt (200), `manifest.json`
+        korrekt erreichbar, DMG-Download-Link
+        (`.../releases/latest/download/Eiswolfs-iBoard.dmg`) löst
+        korrekt zum v1.0-Release-Asset auf.
+      - **Für DIESEN Web-Flasher-Build (die drei .bin-Dateien im
+        Repo-Root UND `dist/Eiswolfs-iBoard-CYD-merged.bin` fürs
+        Release) wurde erneut - wie beim früheren Freund-Build -
+        `cyd/src/secrets.h` kurz durch einen Wegwerf-Token ersetzt**
+        (Inhalt NIE angezeigt, nur strukturell per
+        `sed -E 's/"[^"]{6,}"/"***MASKED***"/g'` verglichen, um
+        sicherzugehen dass die neue Datei dieselbe Form hat), gebaut,
+        per `grep -c` auf 0 Treffer des echten Tokens in allen vier
+        Binärdateien geprüft (0/0/0/0), DANACH sofort die echte
+        `secrets.h` wiederhergestellt und das Projekt erneut gebaut
+        UND auf das angeschlossene Testgerät geflasht (damit der lokale
+        Stand wieder exakt dem echten Gerät entspricht, wie bei jedem
+        Freund-Firmware-Build zuvor).
+      - `README.md`: neue Stichpunkte für Sprache/Einheiten/Helligkeit,
+        neuer Abschnitt "Web installer" mit Link, Installation-Abschnitt
+        verweist jetzt zuerst auf den eigenen Web-Flasher.
+        `dist/FLASHEN.md`: eigener Web-Flasher jetzt als empfohlene
+        Methode, der bisherige generische esptool-js-Weg bleibt als
+        Alternative erhalten.
+      - `.gitignore` ergänzt um `mac/.sender.lock` (leere Lock-Datei,
+        kein Zugewinn im Repo). Vor dem ersten Commit vollständiger
+        Secrets-Scan: `cyd/src/secrets.h` korrekt ausgeschlossen (via
+        `.gitignore`), `git add -A -n`-Trockenlauf durchgesehen, alle
+        `.plist`-Dateien auf Token/Secrets geprüft (keine gefunden, nur
+        unkritische lokale Pfade mit Alex' macOS-Benutzernamen).
+      - Repo erstellt (`gh repo create Eiswolf-BG/Eiswolfs-iBoard-CYD
+        --public`), initialer Commit (57 Dateien), gepusht, Tag `v1.0`
+        gesetzt und gepusht, GitHub Release `v1.0` erstellt mit drei
+        Anhängen (`Eiswolfs-iBoard.dmg`,
+        `Eiswolfs-iBoard-CYD-merged.bin`, `FLASHEN.md`).
+      - Schutzregel-Check danach: Flightradar/Solar Guardian `git
+        status` weiterhin leer, Toolbox unverändert (15 Zeilen
+        Altlasten), `tools/fan-helper`-Root-Prozess lief die ganze Zeit
+        durchgehend weiter.
+- [ ] **Noch offen:** Alex hat nebenbei angemerkt, dass Solar Guardian
+      nachts "Leistung 0 W" zeigt, aber augenscheinlich KEIN aktiver
+      Schlafmodus läuft ("Kein Schlafmodus aktiv!") - ausdrücklich AUF
+      SPÄTER verschoben ("das machen wir danach"), nicht Teil dieses
+      Auftrags/Projekts (Solar Guardian, nicht Eiswolfs iBoard) und noch
+      nicht untersucht.
