@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eiswolfs iBoard - Web Installer</title>
+    <!-- ESP Web Tools Installer Script -->
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+    <style>
+        :root {
+            --bg-color: #060b14;
+            --card-bg: #0d1626;
+            --text-color: #7fd9ff;
+            --accent-color: #22c3ff;
+            --border-color: #1b3350;
+        }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: var(--card-bg);
+            padding: 40px;
+            border-radius: 15px;
+            border: 2px solid var(--border-color);
+            box-shadow: 0 0 20px rgba(34, 195, 255, 0.2);
+            text-align: center;
+            max-width: 450px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+            box-sizing: border-box;
+        }
+
+        /* Twinkling star background (same triangle-wave dim/brighten
+           formula used on the device's own menu/splash screens). */
+        #star-bg {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        h1 {
+            font-size: 22px;
+            margin-bottom: 5px;
+            text-shadow: 0 0 8px rgba(34, 195, 255, 0.6);
+        }
+        .subtitle {
+            font-size: 12px;
+            color: #6f93b8;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+        }
+        .stars-badge {
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        .stars-badge img {
+            vertical-align: middle;
+        }
+        .version-badge {
+            display: inline-block;
+            background-color: rgba(34, 195, 255, 0.1);
+            border: 1px solid var(--border-color);
+            color: var(--accent-color);
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-bottom: 25px;
+            text-shadow: 0 0 4px rgba(34, 195, 255, 0.4);
+        }
+        p {
+            font-size: 14px;
+            color: #ffffff;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .section-label {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-color);
+            margin: 25px 0 10px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+        .instructions {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #a9cfe6;
+            margin-bottom: 20px;
+            border-left: 3px solid var(--accent-color);
+        }
+        .browser-note {
+            font-size: 11px;
+            color: #557293;
+            margin-top: 15px;
+        }
+        .dmg-button {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: #060b14;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+        .license-note {
+            font-size: 11px;
+            color: #6f93b8;
+            margin-top: 30px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 15px;
+        }
+        .license-note a {
+            color: var(--accent-color);
+        }
+
+        esp-web-install-button {
+            --esp-tools-button-bg-color: var(--accent-color);
+            --esp-tools-button-text-color: #060b14;
+            --esp-tools-button-border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<canvas id="star-bg"></canvas>
+<div class="container">
+    <h1>EISWOLFS IBOARD</h1>
+    <div class="subtitle">Install Utility</div>
+    <a class="stars-badge" href="https://github.com/Eiswolf-BG/Eiswolfs-iBoard-CYD" target="_blank" rel="noopener">
+        <img src="https://img.shields.io/github/stars/Eiswolf-BG/Eiswolfs-iBoard-CYD?style=social" alt="GitHub stars">
+    </a>
+    <div class="version-badge">Version: v1.0</div>
+
+    <p>A small desktop dashboard: your Mac's live stats, shown on a Cheap Yellow Display next to your desk.</p>
+
+    <div class="section-label">1. CYD firmware</div>
+    <div class="instructions">
+        1. Connect your CYD via USB cable<br>
+        2. Insert a FAT32-formatted microSD card<br>
+        3. Click "Connect" below and select the port<br>
+        4. Wait for the flash to finish, then set up WiFi (2.4&nbsp;GHz only) on the device
+    </div>
+    <esp-web-install-button manifest="manifest.json"></esp-web-install-button>
+    <div class="browser-note">Requires Chrome, Edge, or Opera (Web Serial API)</div>
+
+    <div class="section-label">2. Mac app (Apple Silicon only)</div>
+    <div class="instructions">
+        Reads your Mac's CPU/GPU/RAM/temperature/fan stats and sends them to
+        the CYD. First launch: right-click the app &rarr; "Open" (the app is
+        ad-hoc signed, not notarized).
+    </div>
+    <a class="dmg-button" href="https://github.com/Eiswolf-BG/Eiswolfs-iBoard-CYD/releases/latest/download/Eiswolfs-iBoard.dmg">Download Eiswolfs-iBoard.dmg</a>
+
+    <div class="license-note">
+        Private, non-commercial use only &ndash;
+        <a href="https://github.com/Eiswolf-BG/Eiswolfs-iBoard-CYD/blob/main/LICENSE.md" target="_blank" rel="noopener">see LICENSE.md</a>
+    </div>
+</div>
+<script>
+(function () {
+  const canvas = document.getElementById('star-bg');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let stars = [];
+
+  function starCountFor(w, h) {
+    const density = (w * h) / 9000;
+    return Math.max(40, Math.min(160, Math.round(density)));
+  }
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  function initStars() {
+    const count = starCountFor(canvas.width, canvas.height);
+    stars = [];
+    for (let i = 0; i < count; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        phase: Math.random() * 256,
+        speed: 1 + Math.random() * 2
+      });
+    }
+  }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { resize(); initStars(); }, 150);
+  });
+  resize();
+  initStars();
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const s of stars) {
+      s.phase = (s.phase + s.speed) % 256;
+      const bright = s.phase < 128 ? s.phase * 2 : (255 - s.phase) * 2;
+      ctx.fillStyle = `rgb(0, ${Math.round(bright * 0.7)}, ${bright})`;
+      ctx.fillRect(s.x, s.y, 2, 2);
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>
