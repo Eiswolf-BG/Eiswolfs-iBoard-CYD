@@ -1,0 +1,30 @@
+cyd/.pio/
+cyd/.vscode/
+mac/venv/
+mac/__pycache__/
+mac/*.pyc
+mac/logs/
+mac/.sender.lock
+mac/bundle_resources/macmon
+dist/
+cyd/src/secrets.h
+.DS_Store
+**/.DS_Store
+
+# PyInstaller/DMG-Bauausgaben - generiert, enthaelt das kompilierte
+# App-Bundle, nicht committen (siehe CLAUDE.md "Installierbare App").
+mac/build/
+mac/dist/
+mac/dmg_build/
+
+# Lokaler Application-Support-Ordner, falls die venv-Entwicklerfassung
+# hier je versehentlich eigene Konfiguration ablegt.
+mac/config.json
+
+# Abgebrochener/ersetzter Alternativ-Ansatz fuer die Luefter-Steuerung
+# (eigenes, verschachteltes Git-Repo eines Drittanbieter-Tools) -
+# die tatsaechlich genutzte Loesung ist tools/fan-helper/, nicht dieser
+# Ordner. Bleibt lokal als Rechercheergebnis, wird nicht mitveroeffentlicht.
+tools/fan-test/MacFanControl/
+tools/fan-helper/__pycache__/
+tools/fan-test/__pycache__/
