@@ -38,6 +38,7 @@ namespace {
         out.fanBoostSec = doc["fan_boost_sec"] | 60;
         out.fanBoostRpm = String((const char*)(doc["fan_boost_rpm"] | "MAX"));
         out.brightness = doc["brightness"] | 100;
+        out.wolMacAddress = String((const char*)(doc["wol_mac"] | ""));
 
         JsonVariant t = doc["touch_cal"];
         if (t.is<JsonObject>()) {
@@ -67,6 +68,7 @@ namespace {
         doc["fan_boost_sec"] = cfg.fanBoostSec;
         doc["fan_boost_rpm"] = cfg.fanBoostRpm;
         doc["brightness"] = cfg.brightness;
+        doc["wol_mac"] = cfg.wolMacAddress;
         JsonObject t = doc.createNestedObject("touch_cal");
         t["a"] = cfg.touchCal.a;
         t["b"] = cfg.touchCal.b;
@@ -112,6 +114,7 @@ namespace {
         out.fanBoostSec = prefs.getInt("fan_bst_sec", 60);
         out.fanBoostRpm = prefs.getString("fan_bst_rpm", "MAX");
         out.brightness = prefs.getInt("brightness", 100);
+        out.wolMacAddress = prefs.getString("wol_mac", "");
         out.touchCal.a = prefs.getFloat("cal_a", 0);
         out.touchCal.b = prefs.getFloat("cal_b", 0);
         out.touchCal.c = prefs.getFloat("cal_c", 0);
@@ -137,6 +140,7 @@ namespace {
         prefs.putInt("fan_bst_sec", cfg.fanBoostSec);
         prefs.putString("fan_bst_rpm", cfg.fanBoostRpm);
         prefs.putInt("brightness", cfg.brightness);
+        prefs.putString("wol_mac", cfg.wolMacAddress);
         prefs.putFloat("cal_a", cfg.touchCal.a);
         prefs.putFloat("cal_b", cfg.touchCal.b);
         prefs.putFloat("cal_c", cfg.touchCal.c);

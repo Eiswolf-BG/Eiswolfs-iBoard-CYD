@@ -51,6 +51,11 @@ _STRINGS = {
         "alert_autostart_failed": "Der Autostart konnte nicht geändert werden. Bitte später erneut versuchen.",
         "alert_fan_boost_unavailable": "Lüfter-Boost nicht verfügbar - der Hilfsdienst ist nicht installiert (siehe tools/fan-helper).",
         "alert_fan_boost_start_failed": "Lüfter-Boost konnte nicht gestartet werden: {err}",
+        "share_token_menu": "Token an Windows senden…",
+        "share_token_no_token": "Noch kein eigener Token gesetzt - siehe docs/TOKEN.md, um erst einen für Mac-App und CYD anzulegen.",
+        "share_token_body": "Öffne diese Adresse innerhalb von 60 Sekunden im Browser auf deinem Windows-Laptop:\n\n{url}\n\nDie heruntergeladene Datei als config.json nach %APPDATA%\\EiswolfsIBoard\\ verschieben (vorhandene Datei ersetzen).",
+        "share_token_done": "Übertragen! Die Datei wurde einmal heruntergeladen und die Freigabe ist jetzt schon wieder geschlossen.",
+        "share_token_timeout": "Zeit abgelaufen (60s) ohne Abruf - die Freigabe ist jetzt geschlossen. Einfach nochmal auf \"Token an Windows senden…\" klicken.",
     },
     "en": {
         "pause_start": "Pause sending",
@@ -97,6 +102,11 @@ _STRINGS = {
         "alert_autostart_failed": "Could not change autostart. Please try again later.",
         "alert_fan_boost_unavailable": "Fan boost not available - the helper service is not installed (see tools/fan-helper).",
         "alert_fan_boost_start_failed": "Could not start fan boost: {err}",
+        "share_token_menu": "Send token to Windows…",
+        "share_token_no_token": "No token set yet - see docs/TOKEN.md to create one for the Mac app and CYD first.",
+        "share_token_body": "Open this address within 60 seconds in a browser on your Windows laptop:\n\n{url}\n\nMove the downloaded file to %APPDATA%\\EiswolfsIBoard\\ as config.json (replace the existing file).",
+        "share_token_done": "Sent! The file was downloaded once and the share is already closed again.",
+        "share_token_timeout": "Timed out (60s) without being picked up - the share is now closed. Just click \"Send token to Windows…\" again.",
     },
 }
 

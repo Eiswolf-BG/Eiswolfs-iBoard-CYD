@@ -27,6 +27,7 @@ import fan_boost
 import i18n
 import login_item
 import mac_sleep
+import token_share
 from usb_link import UsbLink
 
 
@@ -491,6 +492,12 @@ class IBoardApp(rumps.App):
 
         self.sleep_item = rumps.MenuItem(i18n.t("sleep_now"), callback=self.trigger_sleep_now)
 
+        # Auftrag "Token nicht abtippen muessen" - einmalige, 60s
+        # befristete lokale Freigabe der config.json fuers Windows-
+        # Pendant (siehe token_share.py), statt den Token manuell
+        # zwischen zwei Rechnern abzutippen.
+        self.share_token_item = rumps.MenuItem(i18n.t("share_token_menu"), callback=self.share_token)
+
         menu_items = [
             self.link_item,
             self.cpu_item,
@@ -511,6 +518,7 @@ class IBoardApp(rumps.App):
             None,
             self.fan_boost_menu,
             self.sleep_item,
+            self.share_token_item,
         ]
 
         # "Beim Login starten" nur sinnvoll/verfuegbar, wenn das hier
@@ -627,6 +635,7 @@ class IBoardApp(rumps.App):
         if login_item.is_available():
             self.login_item_menu.title = i18n.t("login_item")
         self.sleep_item.title = i18n.t("sleep_now")
+        self.share_token_item.title = i18n.t("share_token_menu")
         self.quit_item.title = i18n.t("quit")
         self.update_ui(None)
 
@@ -668,6 +677,25 @@ class IBoardApp(rumps.App):
 
     def trigger_sleep_now(self, _sender):
         self._do_sleep()
+
+    def share_token(self, _sender):
+        """Startet die einmalige, 60s befristete lokale Freigabe der
+        config.json fuers Windows-Pendant (Auftrag "Token nicht
+        abtippen muessen") - zeigt die abzurufende Adresse in einem
+        Alert, meldet per zweitem Alert, ob sie tatsaechlich abgerufen
+        wurde oder die Zeit ohne Abruf ablief."""
+        if not config.get_fan_boost_token():
+            rumps.alert(i18n.t("alert_title"), i18n.t("share_token_no_token"))
+            return
+
+        def _on_done(served):
+            rumps.alert(
+                i18n.t("alert_title"),
+                i18n.t("share_token_done") if served else i18n.t("share_token_timeout"),
+            )
+
+        url = token_share.start(on_done=_on_done)
+        rumps.alert(i18n.t("alert_title"), i18n.t("share_token_body", url=url))
 
     def toggle_fan_boost(self, sender):
         if self.fan_boost.is_active():

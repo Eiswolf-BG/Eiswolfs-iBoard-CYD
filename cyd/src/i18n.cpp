@@ -79,6 +79,18 @@ static const char* const I18N_DE[] = {
     "Vollgas",
 
     "Helligkeit",
+
+    "WoL-MAC",
+    "MAC-Adresse eingeben",
+    "WOL...",
+
+    "AUS...",
+
+    "OK",
+    "Aendert nur das WLAN-Netzwerk.\nTouch-Kalibrierung bleibt\nunveraendert erhalten.",
+    "Startet die Touch-Kalibrierung\nneu (vier Eckpunkte antippen).\nWLAN bleibt unveraendert.",
+    "Stellt die Display-Helligkeit\nin 10%-Schritten ein (10-100%).",
+    "Antippen der CPU-Temp-Kachel\nweckt danach den Laptop (WoL).\nLanges Halten faehrt ihn runter.\nMAC-Adresse hier eintragen,\nFormat AA:BB:CC:DD:EE:FF.",
 };
 
 static const char* const I18N_EN[] = {
@@ -158,6 +170,18 @@ static const char* const I18N_EN[] = {
     "Max speed",
 
     "Brightness",
+
+    "WoL MAC",
+    "Enter MAC address",
+    "WOL...",
+
+    "OFF...",
+
+    "OK",
+    "Changes only the WiFi network.\nTouch calibration stays\nunchanged.",
+    "Restarts touch calibration\n(tap the four corner points).\nWiFi stays unchanged.",
+    "Adjusts display brightness\nin 10% steps (10-100%).",
+    "Tapping the CPU-temp tile\nwakes the laptop (WoL).\nLong-press shuts it down.\nEnter its MAC address here,\nformat AA:BB:CC:DD:EE:FF.",
 };
 
 static_assert(sizeof(I18N_DE) / sizeof(I18N_DE[0]) == (size_t)StringId::COUNT,

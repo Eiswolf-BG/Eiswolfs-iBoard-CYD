@@ -30,6 +30,12 @@ namespace Storage {
         // wie oben, 10-100 (Prozent), Default 100 = wie bisher (volle
         // Helligkeit, unveraendertes Verhalten fuer bestehende Geraete).
         int brightness = 100;
+        // Wake-on-LAN (Auftrag "Laptop per CYD wecken") - MAC-Adresse des
+        // Windows-Laptops, Format "XX:XX:XX:XX:XX:XX", additiv wie oben.
+        // Leer = Feature inaktiv (Antippen der CPU-Temp-Kachel tut dann
+        // nichts). Bewusst NIE im Quellcode/secrets.h, da oeffentliches
+        // Repo - nur hier, am Geraet eingegeben, auf SD/NVS gespeichert.
+        String wolMacAddress = "";
         bool valid = false;
     };
 

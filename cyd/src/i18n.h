@@ -97,6 +97,28 @@ enum class StringId : uint16_t {
     // IM Einrichtung-Untermenue UND als Bildschirmtitel der Reglerseite.
     SETUP_BRIGHTNESS,
 
+    // Wake-on-LAN fuer den Windows-Laptop (Auftrag, main.cpp) - Button-
+    // Label im Einrichtung-Untermenue, Tastatur-Titel bei der MAC-
+    // Eingabe, kurze Kachel-Rueckmeldung nach dem Antippen.
+    SETUP_WOL_MAC,
+    KB_WOL_MAC_PROMPT,
+    WOL_SENT_FEEDBACK,
+
+    // Windows-Laptop herunterfahren (Auftrag) - langes Halten derselben
+    // CPU-Temp-Kachel, kurze Rueckmeldung wie oben bei WOL_SENT_FEEDBACK.
+    SHUTDOWN_SENT_FEEDBACK,
+
+    // "?"-Erklaerungen im Einrichtung-Untermenue (Auftrag "erklaere die
+    // Menues") - je ein kurzer, mehrzeiliger Infotext (manuelle "\n"-
+    // Umbrueche, dieses Projekt hat keinen automatischen Wortumbruch-
+    // Helfer wie die Schwesterprojekte). HELP_OK bewusst nicht
+    // uebersetzt (identisch in beiden Sprachen).
+    HELP_OK,
+    SETUP_WIFI_HELP,
+    SETUP_CAL_HELP,
+    SETUP_BRIGHTNESS_HELP,
+    SETUP_WOL_HELP,
+
     COUNT
 };
 

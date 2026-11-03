@@ -28,3 +28,8 @@ mac/config.json
 tools/fan-test/MacFanControl/
 tools/fan-helper/__pycache__/
 tools/fan-test/__pycache__/
+
+# Windows-Listener-Bauausgaben (.exe/setup.exe) - generiert aus
+# windows/listener/main.go bzw. windows/installer/installer.nsi, siehe
+# windows/README.md. Nicht committen, nur als Release-Asset (wie dist/).
+windows/installer/*.exe
