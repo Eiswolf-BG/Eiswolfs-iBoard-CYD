@@ -1561,13 +1561,18 @@ ohne dafuer das Handy/Siri zu brauchen.
         EISWOLF /dev/disk4` - Mac-/Windows-kompatibel), dort installiert,
         Token eingetragen, "Token neu laden" getestet - **von Alex live
         bestaetigt: "funktioniert super!"**.
-- [ ] **Noch nicht final geprueft:** die neueste (Tray-)Fassung des
-      Windows-Listeners (mit Icon/Startmenue/"Token neu laden") wurde
-      von Alex noch nicht end-zu-Ende installiert UND getestet (sie
-      bestaetigte nur die VORHERIGE, fensterlose Fassung als
-      funktionierend) - beim naechsten Mal nachfragen/bestaetigen
-      lassen, falls das Thema erneut aufkommt.
-- [ ] **Noch nicht committed/gepusht:** alles in diesem Abschnitt
-      (CYD-Aenderungen, `windows/`, `docs/TOKEN.md`, README-Aenderungen,
-      `.gitignore`) liegt nur lokal - Alex muss das Pushen noch
-      ausdruecklich anfordern (siehe Projektregel oben).
+- [x] **Tray-Fassung des Windows-Listeners end-zu-Ende bestaetigt**:
+      Alex hat zusaetzlich einen echten Neustart des Windows-Laptops
+      getestet - der Listener startet zuverlaessig automatisch mit
+      (Startmenue-Autostart-Verknuepfung funktioniert ueber einen
+      Reboot hinweg, nicht nur beim einmaligen Installieren/manuellen
+      Start). "funktioniert super!" (Mondsichel-Nebenthema separat
+      geklaert) UND "Funktioniert! Listener wird mitgestartet" (nach
+      echtem Neustart) - beides von Alex live bestaetigt.
+- [x] **Committed und gepusht**: alles aus diesem Abschnitt (CYD-
+      Aenderungen, `windows/`, `docs/TOKEN.md`, `tools/fan-helper/
+      README.md`, README-Aenderungen, `.gitignore`) ist seit Commit
+      `ce0a219` auf `main` sowie dem Release **v1.1** (Tag + GitHub
+      Release mit DMG/Firmware/FLASHEN.md/Windows-Setup als Anhaenge,
+      Web-Flasher-Seite auf v1.1 aktualisiert) oeffentlich auf GitHub.
+      Auftrag vollstaendig abgeschlossen.
