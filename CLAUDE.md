@@ -1439,9 +1439,135 @@ unberührt).
         status` weiterhin leer, Toolbox unverändert (15 Zeilen
         Altlasten), `tools/fan-helper`-Root-Prozess lief die ganze Zeit
         durchgehend weiter.
-- [ ] **Noch offen:** Alex hat nebenbei angemerkt, dass Solar Guardian
-      nachts "Leistung 0 W" zeigt, aber augenscheinlich KEIN aktiver
-      Schlafmodus läuft ("Kein Schlafmodus aktiv!") - ausdrücklich AUF
-      SPÄTER verschoben ("das machen wir danach"), nicht Teil dieses
-      Auftrags/Projekts (Solar Guardian, nicht Eiswolfs iBoard) und noch
-      nicht untersucht.
+- [x] **Solar-Guardian-Nebenfrage geklärt** (nicht Teil dieses Projekts,
+      nur zur Dokumentation): Alex' Beobachtung "Leistung 0W, kein
+      Schlafmodus" und später "wo ist die Mondsichel?" stellten sich
+      als zwei harmlose, bereits vorhandene Verhaltensweisen heraus
+      (Solar-Ertragsabfrage pausiert nachts bereits wie gewollt,
+      Batterie/Wetter laufen bewusst mit separatem, reduziertem Takt
+      weiter; die fehlende Mondsichel lag daran, dass Solar Guardian
+      genau waehrend des 22:30-22:55-Abschlussfensters per Silent-Push
+      neu geflasht wurde - kein Bug). Details stehen NICHT hier (falsches
+      Projekt), sondern wurden nur im Chat besprochen.
+
+## Auftrag Wake-on-LAN + Windows-Shutdown + Helligkeitsregler-Vorlaeufer: Fortschritt
+
+Hintergrund: Alex schaltet ihren Windows-Laptop bisher per Siri/WoL-
+Shortcut ein. Wunsch: dasselbe + Herunterfahren direkt vom CYD aus,
+ohne dafuer das Handy/Siri zu brauchen.
+
+- [x] **CYD-Firmware, Wake-on-LAN**: `sendWolPacket()` (`main.cpp`) baut
+      das Magic Packet SELBST und verschickt es per WLAN-Broadcast
+      (Port 9) - braucht dafuer NICHT den Umweg ueber eine Mac-/Windows-
+      App. MAC-Adresse additiv in `Storage::DeviceConfig::
+      wolMacAddress` (leer = Feature inaktiv), NIE im Quellcode (Repo
+      ist oeffentlich) - nur ueber einen neuen Menuepunkt "WoL-MAC"
+      (Einrichtung-Untermenue) am Geraet eingegeben, dafuer `SetupFlow::
+      runTextEntry()` neu als duenner oeffentlicher Wrapper um das
+      bisher private `runKeyboard()` ergaenzt (`setup_flow.h/.cpp`).
+      **Bildschirmtastatur bekam dabei einen fehlenden ":" -Knopf** (fest
+      in der Ziffernreihe, 11 statt 10 Spalten, `ROW_DIGITS`/
+      `ROW_SYMBOLS` in `setup_flow.cpp`) - ohne den war eine MAC-Adresse
+      am Geraet gar nicht eingebbar. **Shift startet jetzt direkt aktiv**
+      (`bool shift = true;` statt `false`, Auftrag "Capslock von
+      vornherein an") - die Umschalttaste selbst war schon immer ein
+      echter Toggle (kein Reset nach einem Buchstaben), nur der
+      Startzustand war unpraktisch.
+      Ausloeser: **kurzes Antippen der CPU-Temp-Kachel** (bewusst NICHT
+      dieselbe Kachel/derselbe Mechanismus wie der Mac-Ruhemodus-Button
+      - Alex' ausdruecklicher Wunsch, falls ein Touch mal falsch erkannt
+      wird). Live getestet (vor dem Firmware-Build, testweise direkt per
+      Python-Magic-Packet vom Mac aus an die per `arp -a`/
+      `dscacheutil` ermittelte MAC gesendet): Laptop fuhr hoch,
+      MAC-Adresse damit verifiziert, BEVOR sie am Geraet eingetragen
+      wurde.
+- [x] **CYD-Firmware, Windows-Shutdown**: `sendShutdownCommand()`
+      schickt `"SHUTDOWN <token>"` per UDP-Broadcast an einen neuen,
+      eigenen Port (`Config::WIN_SHUTDOWN_UDP_PORT`=4212, getrennt vom
+      Mac-Weg Port 4211 UND vom WoL-Port 9) - nutzt denselben
+      `FAN_BOOST_TOKEN` wie Luefter-Boost/Ruhemodus, kein zweites
+      Geheimnis. Ausloeser: **langes Halten DERSELBEN CPU-Temp-Kachel**
+      (Alex' expliziter Wunsch "selbe wie an nur longpress", nachdem sie
+      erst nach einer separaten Kachel gefragt wurde). **Wichtige
+      Faustregel gelernt/wiederverwendet** (galt schon fuer die
+      FAN-Kachel): `TouchCalib::wasTapped()` kennt KEINE Zeitgrenze -
+      auch nach einem langen Halten feuert sie beim Loslassen. Ohne
+      Gegenmassnahme haette ein langes Halten IMMER zusaetzlich den
+      WoL-Kurztipp ausgeloest. Fix: dateiweites (nicht lokal-statisches)
+      Flag `cpuTempLongFired`, vom WoL-Kurztipp-Handler per
+      `!cpuTempLongFired` abgefragt, vom neuen Lang-Halten-Block
+      (exaktes Duplikat des FAN-Blocks inkl. 150ms-Entprellung) gesetzt/
+      zurueckgesetzt - siehe Kommentare an beiden Stellen in `main.cpp`.
+- [x] **"?"-Erklaerungen im Einrichtung-Untermenue** (Auftrag "niemand
+      weiss was WoL-MAC bedeutet"): neue `showHelpPopup()`-Funktion
+      (`main.cpp`, Titel + manuell per "\n" umgebrochener Text, OK-
+      Knopf) - dieses Projekt hat (anders als Flightradar/Solar
+      Guardian) keinen automatischen Wortumbruch-Helfer, deshalb bewusst
+      simpler, manuell umbrochener Text statt eines neuen `fitText()`-
+      Systems. Kleiner "?"-Knopf neben jedem der vier Setup-Menue-
+      Eintraege (WLAN/Kalibrierung/Helligkeit/WoL-MAC), oeffnet je einen
+      kurzen Erklaertext. Neue StringIds `HELP_OK`/`SETUP_*_HELP`.
+- [x] **Windows-Listener** (komplett neuer Projektteil, `windows/`):
+      Mac mini kann wie gewohnt NICHT gleichzeitig Build-Plattform fuer
+      eine echte Windows-`.exe` sein - geloest durch **Cross-Kompilieren
+      von macOS aus**, ohne jemals einen Windows-Rechner zu brauchen:
+      - `windows/listener/main.go` (Go, `GOOS=windows GOARCH=amd64 go
+        build`): lauscht auf UDP 4212, prueft `"SHUTDOWN <token>"` gegen
+        den in `%APPDATA%\EiswolfsIBoard\config.json` gespeicherten
+        Token (gleiches additive-Default-Muster wie `mac/config.py`),
+        ruft bei Treffer `shutdown /s /t 0 /f` auf.
+      - **Erste Fassung war ein reiner unsichtbarer Hintergrundprozess**
+        (kein Fenster, kein Icon) - Alex' berechtigte Kritik: "das
+        findet niemand", und noch wichtiger, ein geaenderter Token
+        brauchte einen manuellen Prozess-Neustart (Task-Manager) ohne
+        erkennbaren Weg, das Programm wiederzufinden. **Komplett
+        umgebaut auf ein echtes Taskleisten-Programm**
+        (`github.com/getlantern/systray`, reines Go/Syscalls unter
+        Windows, cross-kompiliert problemlos ohne CGO): Menue mit
+        Status-Zeile ("Token gesetzt"/"KEIN Token"), **"Token neu
+        laden"** (liest `config.json` neu ein, OHNE Prozess-Neustart -
+        loest Alex' eigentliches Problem direkt), "Konfiguration
+        oeffnen" (Explorer), "Protokoll oeffnen" (Notepad), "Beenden".
+      - Eigenes Icon (`windows/listener/icon.ico` + `windows/installer/
+        icon.ico`, per Python/Pillow erzeugte Schneeflocke in der
+        Eis-Farbe `#22c3ff`, `go:embed` ins Binary eingebettet, kein
+        separates Icon-File zur Laufzeit noetig) - mehrere Groessen
+        (16-256px) in einer `.ico`.
+      - `windows/installer/installer.nsi` (NSIS, `makensis` - ebenfalls
+        von macOS aus baubar, kein Windows noetig): installiert nach
+        `%LOCALAPPDATA%\EiswolfsIBoardWin\`, legt NEU eine Startmenue-
+        Programmgruppe "Eiswolfs iBoard" an (Start- + Deinstallieren-
+        Verknuepfung, Auftrag "ein Eintrag bei Start/Programme") UND
+        weiterhin eine Autostart-Verknuepfung, startet die exe direkt
+        nach der Installation. `RequestExecutionLevel user` - keine
+        Admin-Rechte noetig.
+      - `docs/TOKEN.md` (neu): zentrale, oeffentliche Erklaerung des
+        gemeinsamen Tokens (was er ist, warum er NICHT WoL betrifft,
+        wie man seinen EIGENEN fuer alle drei Stellen setzt - Auftrag
+        "das muss auf Github erklaert werden, mit diesem ominoesen
+        token"). `windows/README.md` (neu) dokumentiert Installation/
+        Bau/Funktionsweise des Listeners. Haupt-`README.md` verlinkt
+        beide, neuer Feature-Punkt, "Building from source" ergaenzt.
+      - `.gitignore`: `windows/installer/*.exe` ergaenzt (gebaute
+        Binaries, wie `dist/` nur als Release-Asset, nie committen).
+      - **Testablauf mit Alex**: Token ueber Finder (`open -R`) selbst
+        in der Mac-App-`config.json` nachgeschaut (NIE von Claude
+        ausgegeben/geloggt - einzige Ausnahme: Alex markierte ihn selbst
+        per IDE-Selektion in ihrem eigenen Editor, dadurch im Kontext
+        sichtbar - daraufhin auf ihre Bitte hin direkt eine fertige
+        `config.json` dafuer geschrieben, nie im Chat-Text wiederholt).
+        Exportiert auf einen frisch (auf Alex' Wunsch) von NTFS auf
+        exFAT formatierten USB-Stick (`diskutil eraseDisk ExFAT
+        EISWOLF /dev/disk4` - Mac-/Windows-kompatibel), dort installiert,
+        Token eingetragen, "Token neu laden" getestet - **von Alex live
+        bestaetigt: "funktioniert super!"**.
+- [ ] **Noch nicht final geprueft:** die neueste (Tray-)Fassung des
+      Windows-Listeners (mit Icon/Startmenue/"Token neu laden") wurde
+      von Alex noch nicht end-zu-Ende installiert UND getestet (sie
+      bestaetigte nur die VORHERIGE, fensterlose Fassung als
+      funktionierend) - beim naechsten Mal nachfragen/bestaetigen
+      lassen, falls das Thema erneut aufkommt.
+- [ ] **Noch nicht committed/gepusht:** alles in diesem Abschnitt
+      (CYD-Aenderungen, `windows/`, `docs/TOKEN.md`, README-Aenderungen,
+      `.gitignore`) liegt nur lokal - Alex muss das Pushen noch
+      ausdruecklich anfordern (siehe Projektregel oben).

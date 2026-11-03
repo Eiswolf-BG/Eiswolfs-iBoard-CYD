@@ -32,6 +32,11 @@ namespace Config {
     constexpr uint16_t FAN_CMD_UDP_PORT = 4211;
     // Langes Antippen der FAN-Kachel startet/beendet den Luefter-Boost.
     constexpr uint32_t FAN_LONGPRESS_MS = 500;
+    // Eigener Port fuer den Shutdown-Befehl an den Windows-Laptop
+    // (Auftrag "Windows-Laptop herunterfahren") - der dortige
+    // Hintergrund-Listener (windows/) lauscht hier, komplett getrennt
+    // vom Mac-Weg (Port 4211) und vom WoL-Magic-Packet-Port (9).
+    constexpr uint16_t WIN_SHUTDOWN_UDP_PORT = 4212;
     // Wie lange das CYD nach einem gesendeten Boost-/Auto-Befehl auf die
     // Bestaetigung im Datenstrom (Feld "fan_boost") wartet, bevor es
     // kurz "n/v" zeigt (siehe Auftrag).

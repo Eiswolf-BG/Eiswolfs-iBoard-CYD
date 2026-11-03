@@ -202,8 +202,12 @@ struct KeyRow {
 };
 
 // Reihen: Ziffern/Symbole umschaltbar, Buchstaben mit Shift.
-const char* ROW_DIGITS[] = { "1","2","3","4","5","6","7","8","9","0" };
-const char* ROW_SYMBOLS[] = { "!","@","#","$","%","^","&","*","-","_" };
+// ":" fest mit auf der Ziffernreihe (Auftrag "Wake-on-LAN") - MAC-
+// Adressen brauchen den Doppelpunkt, der sonst auf keiner Ebene der
+// Tastatur vorkommt. Elf statt zehn Spalten, eigene Spaltenbreite
+// (colW0), unabhaengig von den anderen Reihen (weiterhin 10 Spalten).
+const char* ROW_DIGITS[] = { "1","2","3","4","5","6","7","8","9","0",":" };
+const char* ROW_SYMBOLS[] = { "!","@","#","$","%","^","&","*","-","_",":" };
 const char* ROW1_LOWER[] = { "q","w","e","r","t","y","u","i","o","p" };
 const char* ROW1_UPPER[] = { "Q","W","E","R","T","Y","U","I","O","P" };
 const char* ROW2_LOWER[] = { "a","s","d","f","g","h","j","k","l" };
@@ -214,7 +218,10 @@ const char* ROW3_UPPER[] = { "Z","X","C","V","B","N","M" };
 String runKeyboard(TFT_eSPI& tft, const char* title, bool isPassword, bool& cancelled) {
     const int16_t W = Config::SCREEN_WIDTH;
     String text = "";
-    bool shift = false;
+    // Start mit aktiver Umschaltung (Auftrag "Capslock von vornherein
+    // an") - bleibt dank der bestehenden Toggle-Logik dauerhaft aktiv,
+    // bis man sie selbst wieder antippt.
+    bool shift = true;
     bool symbols = false;
     bool showPassword = false;
     cancelled = false;
@@ -239,11 +246,13 @@ String runKeyboard(TFT_eSPI& tft, const char* title, bool isPassword, bool& canc
         int16_t keyH = 28;
         int16_t y = 40;
 
-        // Reihe 0: Ziffern/Symbole
+        // Reihe 0: Ziffern/Symbole + fester ":"-Knopf (Auftrag "Wake-on-
+        // LAN") - 11 statt 10 Spalten, eigene Breite (colW0).
         const char** row0 = symbols ? ROW_SYMBOLS : ROW_DIGITS;
+        int16_t colW0 = W / 11;
         int16_t colW = W / 10;
-        for (int i = 0; i < 10; i++) {
-            drawButton(tft, { (int16_t)(i * colW), y, colW, keyH }, row0[i], TFT_CYAN);
+        for (int i = 0; i < 11; i++) {
+            drawButton(tft, { (int16_t)(i * colW0), y, colW0, keyH }, row0[i], TFT_CYAN);
         }
         y += keyH;
 
@@ -297,6 +306,7 @@ String runKeyboard(TFT_eSPI& tft, const char* title, bool isPassword, bool& canc
         }
 
         int16_t keyH = 28;
+        int16_t colW0 = W / 11;
         int16_t colW = W / 10;
         int16_t y0 = 40, y1 = y0 + keyH, y2 = y1 + keyH, y3 = y2 + keyH, y4 = y3 + keyH;
 
@@ -304,8 +314,8 @@ String runKeyboard(TFT_eSPI& tft, const char* title, bool isPassword, bool& canc
 
         if (tap.y >= y0 && tap.y < y1) {
             const char** row0 = symbols ? ROW_SYMBOLS : ROW_DIGITS;
-            int idx = tap.x / colW;
-            if (idx >= 0 && idx < 10) text += row0[idx];
+            int idx = tap.x / colW0;
+            if (idx >= 0 && idx < 11) text += row0[idx];
         } else if (tap.y >= y1 && tap.y < y2) {
             const char** row1 = shift ? ROW1_UPPER : ROW1_LOWER;
             int idx = tap.x / colW;
@@ -522,6 +532,13 @@ void runCalibrationOnly(TFT_eSPI& tft, Storage::DeviceConfig& cfg) {
     cfg.touchCal = cal;
     cfg.valid = true;
     Storage::save(cfg);
+}
+
+// Dünner, öffentlicher Zugang zur sonst anonymen runKeyboard() (Auftrag
+// "Wake-on-LAN fuer den Windows-Laptop") - fuer die MAC-Adress-Eingabe
+// im Menue, kein Passwort-Maskieren noetig.
+String runTextEntry(TFT_eSPI& tft, const char* title, bool& cancelled) {
+    return runKeyboard(tft, title, false, cancelled);
 }
 
 }

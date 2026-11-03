@@ -27,10 +27,16 @@ the Mac via USB only while flashing.
   icon.
   - Fan boost: temporarily push the fan to a fixed speed from the Mac
     menu or by holding the FAN tile on the CYD - needs a small,
-    optional, separately-installed root helper (`tools/fan-helper/`).
+    optional [root helper](tools/fan-helper/README.md) (included in
+    this repo, one `sudo bash install.sh` away).
   - Sleep: tap the PWR tile on the CYD (or use "Sleep now" in the Mac
     menu) to put the Mac mini straight to sleep - no need to reach for
     the keyboard.
+- **Wake and shut down a Windows laptop, too**: tap the CPU-temp tile
+  to wake it over the network (plain Wake-on-LAN, nothing to install),
+  long-press the same tile to shut it down (needs the small optional
+  [Windows listener](windows/README.md)). Both need the laptop's MAC
+  address, entered on the CYD itself (menu → Setup → WoL-MAC).
 - **Two connection paths at once**: the same data goes out over WiFi
   (UDP broadcast + unicast) and over a USB serial line simultaneously -
   the CYD picks whichever is fresher (configurable: auto/USB-only/
@@ -65,11 +71,19 @@ above for both halves. Details and alternative methods:
   copy attached to each [release](../../releases)) for flashing with
   a generic tool or `esptool` from the command line, no software
   install needed either way.
+- **Windows listener** (optional, only for shutting down a Windows
+  laptop from the CYD): see [windows/README.md](windows/README.md).
+- **Fan helper** (optional, only for fan boost): see
+  [tools/fan-helper/README.md](tools/fan-helper/README.md) - what it
+  does, why it needs root, and the one-line install.
 
-Both the Mac app and the CYD firmware need a matching **shared secret
-token** to unlock the optional fan-boost/sleep extras; without it,
-those two features simply show "not available" while the core
-dashboard works normally.
+The Mac app, the CYD firmware, and (if you use it) the Windows listener
+all need a matching **shared secret token** to unlock the optional
+fan-boost/sleep/shutdown extras - see [docs/TOKEN.md](docs/TOKEN.md)
+for exactly what it is and how to set it. Without it, those features
+simply do nothing (or show "not available") while the core dashboard
+works normally. Wake-on-LAN itself needs no token - it's a plain
+network wake-up packet with no concept of authentication.
 
 ## Building from source
 
@@ -77,6 +91,8 @@ dashboard works normally.
   build notes in `CLAUDE.md`.
 - **CYD firmware**: PlatformIO (`cd cyd && pio run`), targets the
   classic CYD (ESP32-2432S028, resistive touch).
+- **Windows listener**: Go, cross-built from macOS/Linux - see
+  [windows/README.md](windows/README.md).
 
 ## Third-party components
 

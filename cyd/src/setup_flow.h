@@ -16,4 +16,9 @@ namespace SetupFlow {
 
     // Nur Touch-Kalibrierung neu (WLAN bleibt wie es ist).
     void runCalibrationOnly(TFT_eSPI& tft, Storage::DeviceConfig& cfg);
+
+    // Allgemeine Texteingabe ueber die vorhandene Bildschirmtastatur
+    // (Auftrag "Wake-on-LAN") - liefert den eingegebenen Text, cancelled
+    // = true, falls der Nutzer abgebrochen hat.
+    String runTextEntry(TFT_eSPI& tft, const char* title, bool& cancelled);
 }

@@ -429,6 +429,27 @@ constexpr uint32_t PWR_TAP_LOCKOUT_MS = 3000;
 constexpr uint32_t PWR_FEEDBACK_RUHE_MS = 2000;
 constexpr uint32_t PWR_FEEDBACK_NA_MS = 1500;
 
+// Wake-on-LAN-Rueckmeldung auf der CPU-Temp-Kachel (Auftrag) - eigener,
+// von PwrFeedback komplett unabhaengiger Zustand/eigene Taste (Alex'
+// ausdruecklicher Wunsch: NICHT dieselbe Kachel wie der Ruhemodus, falls
+// ein Touch-Ereignis mal falsch erkannt wird). Waehrend aktiv blendet
+// updateDisplay() die normale Temperaturanzeige dieser einen Kachel aus,
+// damit "WOL..." nicht sofort von einem neuen Messwert ueberschrieben wird.
+bool wolFeedbackActive = false;
+uint32_t wolFeedbackUntilMs = 0;
+uint32_t wolTapLockedUntilMs = 0;
+constexpr uint32_t WOL_TAP_LOCKOUT_MS = 3000;
+constexpr uint32_t WOL_FEEDBACK_MS = 1500;
+
+// Windows-Shutdown auf derselben Kachel wie WoL, aber langes Halten
+// (Alex' ausdruecklicher Wunsch, "selbe wie an nur longpress"). Datei-
+// weiter Scope (NICHT static innerhalb des Lang-Antippen-Blocks unten),
+// weil der kurze-Tipp-Handler weiter oben dieses Flag mitlesen muss: ohne
+// das wuerde TouchCalib::wasTapped() beim Loslassen NACH einem langen
+// Halten zusaetzlich faelschlich auch noch den WoL-Kurztipp ausloesen
+// (wasTapped() kennt selbst keine Zeitgrenze, siehe touch_calib.cpp).
+bool cpuTempLongFired = false;
+
 Rect setupButtonRect = { 10, 200, 130, 28 }; // Button "Menue" auf dem "Keine Verbindung"-Screen
 // Mindestens ca. 80x40px (Auftrag) - reicht bewusst etwas in den oberen
 // Rand der ersten Kachelreihe hinein (die Streifen dort sind nicht
@@ -493,6 +514,63 @@ void sendSleepCommand() {
         udp.print(line);
         udp.endPacket();
     }
+}
+
+// Wake-on-LAN fuer Alex' Windows-Laptop (Auftrag) - das CYD verschickt das
+// Magic Packet SELBST per WLAN-Broadcast, braucht dafuer NICHT den Umweg
+// ueber die Mac-App (anders als Ruhemodus/Luefter-Boost). Die MAC-Adresse
+// steht NIE im Quellcode (oeffentliches Repo), sondern nur in
+// deviceCfg.wolMacAddress (SD/NVS, am Geraet eingegeben).
+bool parseMacAddress(const String& text, uint8_t out[6]) {
+    int idx = 0;
+    int pos = 0;
+    while (idx < 6) {
+        int sep = text.indexOf(':', pos);
+        String byteStr = (sep == -1) ? text.substring(pos) : text.substring(pos, sep);
+        byteStr.trim();
+        if (byteStr.length() != 2) return false;
+        char* endPtr = nullptr;
+        long val = strtol(byteStr.c_str(), &endPtr, 16);
+        if (endPtr == byteStr.c_str() || *endPtr != '\0' || val < 0 || val > 255) return false;
+        out[idx] = (uint8_t)val;
+        idx++;
+        if (sep == -1) break;
+        pos = sep + 1;
+    }
+    return idx == 6;
+}
+
+void sendWolPacket() {
+    uint8_t mac[6];
+    if (!parseMacAddress(deviceCfg.wolMacAddress, mac)) return;
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    // Magic Packet: 6x 0xFF, danach die Ziel-MAC 16x wiederholt (102 Byte
+    // insgesamt) - Standardformat, von jeder WoL-faehigen Netzwerkkarte
+    // erkannt. Broadcast auf Port 9 (Standard-WoL-Port), erreicht jedes
+    // Geraet im selben L2-Netz (WLAN und Ethernet am selben Router zaehlen
+    // normalerweise als ein gemeinsames Netz).
+    uint8_t packet[102];
+    for (int i = 0; i < 6; i++) packet[i] = 0xFF;
+    for (int i = 0; i < 16; i++) {
+        memcpy(packet + 6 + i * 6, mac, 6);
+    }
+    udp.beginPacket(IPAddress(255, 255, 255, 255), 9);
+    udp.write(packet, sizeof(packet));
+    udp.endPacket();
+}
+
+// Windows-Laptop herunterfahren (Auftrag) - eigener Befehl an den
+// Hintergrund-Listener (windows/), der auf WIN_SHUTDOWN_UDP_PORT lauscht
+// und bei gueltigem Token "shutdown /s" ausfuehrt. Nutzt denselben Token
+// wie Luefter-Boost/Ruhemodus (FAN_BOOST_TOKEN) - kein zweites Geheimnis.
+void sendShutdownCommand() {
+    if (WiFi.status() != WL_CONNECTED) return;
+    char line[80];
+    snprintf(line, sizeof(line), "SHUTDOWN %s", FAN_BOOST_TOKEN);
+    udp.beginPacket(IPAddress(255, 255, 255, 255), Config::WIN_SHUTDOWN_UDP_PORT);
+    udp.print(line);
+    udp.endPacket();
 }
 
 void drawButton(const Rect& r, const char* label, uint16_t color, bool filled = false) {
@@ -756,7 +834,7 @@ void updateDisplay() {
     if (full || (int)current.ramPct != (int)lastDrawn.ramPct) {
         drawTileValue(TILE_RAM, String((int)current.ramPct) + "%", TFT_ORANGE, true, current.ramPct);
     }
-    if (full || (int)current.cpuTempC != (int)lastDrawn.cpuTempC || current.hasCpuTemp != lastDrawn.hasCpuTemp) {
+    if (!wolFeedbackActive && (full || (int)current.cpuTempC != (int)lastDrawn.cpuTempC || current.hasCpuTemp != lastDrawn.hasCpuTemp)) {
         if (current.hasCpuTemp) {
             drawTileValue(TILE_CPU_TEMP, String((int)current.cpuTempC) + "C", colorForTemp(current.cpuTempC), false, 0);
         } else {
@@ -1187,28 +1265,105 @@ void runBrightnessMenu() {
     }
 }
 
-void runSetupMenu() {
+// Kleines Erklaer-Fenster (Auftrag "erklaere die Menues mit kleinen '?'")
+// - Titel + mehrzeiliger Text (manuell per "\n" umgebrochen, siehe
+// i18n.cpp-Kommentar), OK-Knopf unten. Blockierend, kein Rueckgabewert -
+// der Aufrufer zeichnet seinen eigenen Screen danach selbst neu.
+void showHelpPopup(const char* title, const char* body) {
     const int16_t W = Config::SCREEN_WIDTH;
-    Rect wifiBtn = { 20, 60, (int16_t)(W - 40), 36 };
-    Rect calBtn = { 20, 100, (int16_t)(W - 40), 36 };
-    Rect brightBtn = { 20, 140, (int16_t)(W - 40), 36 };
-    Rect backBtn = { 20, 184, (int16_t)(W - 40), 32 };
+    const int16_t H = Config::SCREEN_HEIGHT;
+    Rect okBtn = { (int16_t)(W / 2 - 60), (int16_t)(H - 44), 120, 32 };
 
     tft.fillScreen(TFT_BLACK);
     useBuiltinFont();
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextDatum(MC_DATUM);
-    tft.drawString(I18n::t(StringId::SETUP_TITLE), W / 2, 30);
+    tft.drawString(title, W / 2, 24);
+
     tft.setTextDatum(TL_DATUM);
-    drawButton(wifiBtn, I18n::t(StringId::SETUP_WIFI_ONLY), TFT_CYAN);
-    drawButton(calBtn, I18n::t(StringId::SETUP_RECALIBRATE), TFT_CYAN);
-    drawButton(brightBtn, I18n::t(StringId::SETUP_BRIGHTNESS), TFT_CYAN);
-    drawButton(backBtn, I18n::t(StringId::MENU_BACK), TFT_ORANGE);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    int16_t y = 56;
+    String bodyStr(body);
+    int start = 0;
+    while (start <= (int)bodyStr.length()) {
+        int nl = bodyStr.indexOf('\n', start);
+        String line = (nl == -1) ? bodyStr.substring(start) : bodyStr.substring(start, nl);
+        tft.setCursor(10, y);
+        tft.print(line);
+        y += 18;
+        if (nl == -1) break;
+        start = nl + 1;
+    }
+
+    drawButton(okBtn, I18n::t(StringId::HELP_OK), TFT_GREEN);
+
+    while (true) {
+        TouchCalib::Point tap;
+        if (TouchCalib::wasTapped(tap) && okBtn.contains(tap.x, tap.y)) {
+            return;
+        }
+        delay(10);
+    }
+}
+
+void runSetupMenu() {
+    const int16_t W = Config::SCREEN_WIDTH;
+    const int16_t mainW = (int16_t)(W - 40 - 28 - 4);
+    const int16_t helpX = (int16_t)(20 + mainW + 4);
+    Rect wifiBtn = { 20, 50, mainW, 32 };
+    Rect wifiHelp = { helpX, 50, 28, 32 };
+    Rect calBtn = { 20, 86, mainW, 32 };
+    Rect calHelp = { helpX, 86, 28, 32 };
+    Rect brightBtn = { 20, 122, mainW, 32 };
+    Rect brightHelp = { helpX, 122, 28, 32 };
+    Rect wolBtn = { 20, 158, mainW, 32 };
+    Rect wolHelp = { helpX, 158, 28, 32 };
+    Rect backBtn = { 20, 194, (int16_t)(W - 40), 32 };
+
+    auto render = [&]() {
+        tft.fillScreen(TFT_BLACK);
+        useBuiltinFont();
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString(I18n::t(StringId::SETUP_TITLE), W / 2, 30);
+        tft.setTextDatum(TL_DATUM);
+        drawButton(wifiBtn, I18n::t(StringId::SETUP_WIFI_ONLY), TFT_CYAN);
+        drawButton(wifiHelp, "?", TFT_YELLOW);
+        drawButton(calBtn, I18n::t(StringId::SETUP_RECALIBRATE), TFT_CYAN);
+        drawButton(calHelp, "?", TFT_YELLOW);
+        drawButton(brightBtn, I18n::t(StringId::SETUP_BRIGHTNESS), TFT_CYAN);
+        drawButton(brightHelp, "?", TFT_YELLOW);
+        drawButton(wolBtn, I18n::t(StringId::SETUP_WOL_MAC), TFT_CYAN);
+        drawButton(wolHelp, "?", TFT_YELLOW);
+        drawButton(backBtn, I18n::t(StringId::MENU_BACK), TFT_ORANGE);
+    };
+
+    render();
 
     while (true) {
         TouchCalib::Point tap;
         if (!TouchCalib::wasTapped(tap)) {
             delay(10);
+            continue;
+        }
+        if (wifiHelp.contains(tap.x, tap.y)) {
+            showHelpPopup(I18n::t(StringId::SETUP_WIFI_ONLY), I18n::t(StringId::SETUP_WIFI_HELP));
+            render();
+            continue;
+        }
+        if (calHelp.contains(tap.x, tap.y)) {
+            showHelpPopup(I18n::t(StringId::SETUP_RECALIBRATE), I18n::t(StringId::SETUP_CAL_HELP));
+            render();
+            continue;
+        }
+        if (brightHelp.contains(tap.x, tap.y)) {
+            showHelpPopup(I18n::t(StringId::SETUP_BRIGHTNESS), I18n::t(StringId::SETUP_BRIGHTNESS_HELP));
+            render();
+            continue;
+        }
+        if (wolHelp.contains(tap.x, tap.y)) {
+            showHelpPopup(I18n::t(StringId::SETUP_WOL_MAC), I18n::t(StringId::SETUP_WOL_HELP));
+            render();
             continue;
         }
         if (wifiBtn.contains(tap.x, tap.y)) {
@@ -1221,16 +1376,27 @@ void runSetupMenu() {
         }
         if (brightBtn.contains(tap.x, tap.y)) {
             runBrightnessMenu();
-            tft.fillScreen(TFT_BLACK);
-            useBuiltinFont();
-            tft.setTextColor(TFT_WHITE, TFT_BLACK);
-            tft.setTextDatum(MC_DATUM);
-            tft.drawString(I18n::t(StringId::SETUP_TITLE), W / 2, 30);
-            tft.setTextDatum(TL_DATUM);
-            drawButton(wifiBtn, I18n::t(StringId::SETUP_WIFI_ONLY), TFT_CYAN);
-            drawButton(calBtn, I18n::t(StringId::SETUP_RECALIBRATE), TFT_CYAN);
-            drawButton(brightBtn, I18n::t(StringId::SETUP_BRIGHTNESS), TFT_CYAN);
-            drawButton(backBtn, I18n::t(StringId::MENU_BACK), TFT_ORANGE);
+            render();
+            continue;
+        }
+        if (wolBtn.contains(tap.x, tap.y)) {
+            // MAC-Adresse fuer Wake-on-LAN (Auftrag) - NIE im Quellcode,
+            // nur hier am Geraet eingegeben und auf SD/NVS gespeichert
+            // (oeffentliches Repo). Ungueltige Eingabe wird einfach
+            // verworfen (gleiches, bewusst schlichtes Muster wie bei den
+            // anderen Eingabefeldern in diesem Projekt).
+            bool cancelled = false;
+            String text = SetupFlow::runTextEntry(tft, I18n::t(StringId::KB_WOL_MAC_PROMPT), cancelled);
+            if (!cancelled) {
+                text.trim();
+                text.toUpperCase();
+                uint8_t probe[6];
+                if (text.length() == 0 || parseMacAddress(text, probe)) {
+                    deviceCfg.wolMacAddress = text;
+                    Storage::save(deviceCfg);
+                }
+            }
+            render();
             continue;
         }
         if (backBtn.contains(tap.x, tap.y)) {
@@ -1598,6 +1764,21 @@ void loop() {
             pwrFeedbackState = PwrFeedback::Ruhe;
             pwrFeedbackUntilMs = millis() + PWR_FEEDBACK_RUHE_MS;
             drawPwrFeedbackText(I18n::t(StringId::PWR_SLEEP_FEEDBACK));
+        } else if (tapped && deviceCfg.wolMacAddress.length() > 0 &&
+                   tileRect(TILE_CPU_TEMP).contains(tap.x, tap.y) && millis() >= wolTapLockedUntilMs &&
+                   !cpuTempLongFired) {
+            // Wake-on-LAN (Auftrag) - eigene Kachel/eigener Code-Pfad,
+            // komplett unabhaengig von der PWR-Kachel (Alex' Wunsch: ein
+            // falsch erkannter Touch darf nie den Mac schlafen schicken,
+            // wenn eigentlich der Laptop gemeint war, und umgekehrt).
+            // !cpuTempLongFired: unterdrueckt den Kurztipp, wenn GERADE
+            // ein langes Halten (Shutdown) auf derselben Kachel feuerte -
+            // sonst wuerde das Loslassen danach zusaetzlich WoL ausloesen.
+            sendWolPacket();
+            wolTapLockedUntilMs = millis() + WOL_TAP_LOCKOUT_MS;
+            wolFeedbackActive = true;
+            wolFeedbackUntilMs = millis() + WOL_FEEDBACK_MS;
+            drawTileValue(TILE_CPU_TEMP, I18n::t(StringId::WOL_SENT_FEEDBACK), TFT_YELLOW, false, 0);
         }
 
         // Luefter-Boost: langes Antippen (Config::FAN_LONGPRESS_MS) der
@@ -1645,6 +1826,51 @@ void loop() {
             }
         }
 
+        // Windows-Laptop herunterfahren: langes Antippen derselben
+        // CPU-Temp-Kachel wie WoL (Auftrag "selbe wie an nur longpress") -
+        // exakt dasselbe Muster wie beim FAN-Block oben, inkl. 150ms-
+        // Entprellung. cpuTempLongFired ist dateiweit (siehe oben), damit
+        // der WoL-Kurztipp-Handler weiter oben ihn mitlesen kann.
+        {
+            static bool pressActive = false;
+            static uint32_t pressStartMs = 0;
+            static bool releasePending = false;
+            static uint32_t releaseStartMs = 0;
+            TouchCalib::Point raw = TouchCalib::rawPoint();
+            if (raw.touched) {
+                releasePending = false;
+                TouchCalib::Point mp = TouchCalib::mappedPoint();
+                Rect cpuTempOuter = tileRect(TILE_CPU_TEMP);
+                if (!pressActive) {
+                    if (cpuTempOuter.contains(mp.x, mp.y) && deviceCfg.wolMacAddress.length() > 0) {
+                        pressActive = true;
+                        cpuTempLongFired = false;
+                        pressStartMs = millis();
+                    }
+                } else if (!cpuTempLongFired && millis() - pressStartMs >= Config::FAN_LONGPRESS_MS) {
+                    cpuTempLongFired = true;
+                    sendShutdownCommand();
+                    wolFeedbackActive = true;
+                    wolFeedbackUntilMs = millis() + WOL_FEEDBACK_MS;
+                    drawTileValue(TILE_CPU_TEMP, I18n::t(StringId::SHUTDOWN_SENT_FEEDBACK), TFT_RED, false, 0);
+                }
+            } else if (pressActive) {
+                if (!releasePending) {
+                    releasePending = true;
+                    releaseStartMs = millis();
+                } else if (millis() - releaseStartMs >= 150) {
+                    pressActive = false;
+                    releasePending = false;
+                    // cpuTempLongFired bleibt bewusst bis hierhin stehen -
+                    // erst JETZT, nachdem auch der kurze-Tipp-Handler oben
+                    // (derselbe Loslass-Zyklus) laengst durchgelaufen ist,
+                    // wird es zurueckgesetzt, bereit fuer die naechste
+                    // Beruehrung.
+                    cpuTempLongFired = false;
+                }
+            }
+        }
+
         // Bestaetigung eines gesendeten FAN-Befehls abwarten (siehe
         // sendFanCommand()) - kommt binnen Config::FAN_CMD_CONFIRM_TIMEOUT_MS
         // keine passende Aenderung von current.fanBoost, kurz "n/v" zeigen.
@@ -1681,6 +1907,20 @@ void loop() {
         if (pwrFeedbackState == PwrFeedback::NotAvailable && millis() >= pwrFeedbackUntilMs) {
             pwrFeedbackState = PwrFeedback::None;
             drawHeaderPwrValueNew(true);
+        }
+
+        // Wake-on-LAN-Anzeigefenster lief ab -> zurueck zur normalen
+        // CPU-Temp-Anzeige. Direktes Neuzeichnen aus current (nicht ueber
+        // updateDisplay()s Aenderungs-Check), da lastDrawn.cpuTempC trotz
+        // ausgeblendeter Anzeige schon auf dem aktuellen Stand war und sich
+        // seitdem evtl. gar nicht veraendert hat.
+        if (wolFeedbackActive && millis() >= wolFeedbackUntilMs) {
+            wolFeedbackActive = false;
+            if (current.hasCpuTemp) {
+                drawTileValue(TILE_CPU_TEMP, String((int)current.cpuTempC) + "C", colorForTemp(current.cpuTempC), false, 0);
+            } else {
+                drawTileValue(TILE_CPU_TEMP, "--", TFT_DARKGREY, false, 0);
+            }
         }
 
         if (current.valid) {
