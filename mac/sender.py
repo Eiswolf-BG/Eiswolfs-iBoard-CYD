@@ -31,7 +31,7 @@ import token_share
 from usb_link import UsbLink
 
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 
 # Application-Support-Ordner: fuer Logs/Lock-Datei, GEMEINSAM genutzt
 # von der Entwickler-Fassung (dieses venv-Projekt) und der gebauten
