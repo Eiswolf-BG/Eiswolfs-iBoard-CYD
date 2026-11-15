@@ -91,6 +91,106 @@ bool wasTapped(Point& outPoint) {
     return fired;
 }
 
+// Seiten-Wischen + Antippen (Auftrag "Controls-Screen", strengere
+// Erkennung durch Auftrag "Controls-Bedienung") - eigener Zustand,
+// unabhaengig von wasTapped() oben. Klassifiziert erst beim (entprellten)
+// Loslassen:
+//  - Wischen: waagerechte Strecke >= SWIPE_MIN_DX_PX, groesste senkrechte
+//    Abweichung <= SWIPE_MAX_DY_PX, waagerecht mindestens
+//    SWIPE_MIN_HORIZONTAL_RATIO-mal so viel wie die senkrechte Abweichung,
+//    Dauer >= SWIPE_MIN_HOLD_MS.
+//  - Antippen: die GROESSTE Bewegung waehrend der GANZEN Beruehrung (nicht
+//    nur Start/Ende) bleibt unter TAP_MAX_MOVE_PX, UND die Dauer liegt
+//    zwischen TAP_MIN_HOLD_MS und TAP_MAX_HOLD_MS.
+//  - Alles andere (z.B. eine missglueckte, zu kurze/zu schraege Wisch-
+//    geste, die weder die Wisch- noch die Antippen-Kriterien erfuellt)
+//    verfaellt ohne Wirkung (Gesture::None) - loest NIE eine Kachel aus.
+// Der Aufsetzpunkt ist der Mittelwert der ersten bis zu drei Messwerte
+// (der allererste Messwert eines resistiven Touchscreens ist oft
+// ungenau) - tapOut liefert diesen (stabilen) Punkt, nicht den
+// Loslasspunkt.
+Gesture pollGesture(Point& tapOut) {
+    static bool pressActive = false;
+    static Point pressStart;
+    static Point pressLast;
+    static uint32_t pressStartMs = 0;
+    static int16_t maxAbsDy = 0;
+    static int16_t maxMove = 0;
+    static Point firstSamples[3];
+    static uint8_t firstSampleCount = 0;
+    static bool releasePending = false;
+    static uint32_t releaseStartMs = 0;
+
+    Point cur = mappedPoint();
+
+    if (cur.touched) {
+        releasePending = false;
+        if (!pressActive) {
+            pressActive = true;
+            pressStartMs = millis();
+            maxAbsDy = 0;
+            maxMove = 0;
+            firstSampleCount = 0;
+        }
+        if (firstSampleCount < 3) {
+            firstSamples[firstSampleCount++] = cur;
+            int32_t sx = 0, sy = 0;
+            for (uint8_t i = 0; i < firstSampleCount; i++) {
+                sx += firstSamples[i].x;
+                sy += firstSamples[i].y;
+            }
+            pressStart.x = (int16_t)(sx / firstSampleCount);
+            pressStart.y = (int16_t)(sy / firstSampleCount);
+        }
+        int16_t dxNow = (int16_t)abs((int)cur.x - (int)pressStart.x);
+        int16_t dyNow = (int16_t)abs((int)cur.y - (int)pressStart.y);
+        if (dyNow > maxAbsDy) maxAbsDy = dyNow;
+        int16_t moveNow = (dxNow > dyNow) ? dxNow : dyNow; // groesste Bewegung in irgendeine Richtung
+        if (moveNow > maxMove) maxMove = moveNow;
+        pressLast = cur;
+        return Gesture::None;
+    }
+
+    if (!pressActive) return Gesture::None;
+
+    // Entprellung: ein kurzer Aussetzer des resistiven Sensors darf das
+    // Loslassen nicht vorzeitig ausloesen (gleiches Muster wie die
+    // bestehenden Lang-Antippen-Griffe in main.cpp). Ein ECHTES erneutes
+    // Aufsetzen nach Ablauf der Entprellung zaehlt als NEUE Beruehrung
+    // (pressActive ist dann schon false, siehe oben) und beeinflusst die
+    // bereits beendete Beruehrung nicht mehr.
+    if (!releasePending) {
+        releasePending = true;
+        releaseStartMs = millis();
+        return Gesture::None;
+    }
+    if (millis() - releaseStartMs < Config::TOUCH_RELEASE_DEBOUNCE_MS) {
+        return Gesture::None;
+    }
+
+    pressActive = false;
+    releasePending = false;
+
+    int16_t dx = (int16_t)((int)pressLast.x - (int)pressStart.x);
+    uint32_t heldMs = releaseStartMs - pressStartMs;
+
+    bool horizontalDominant = (float)abs(dx) >= Config::SWIPE_MIN_HORIZONTAL_RATIO * (float)maxAbsDy;
+    if (abs(dx) >= Config::SWIPE_MIN_DX_PX && maxAbsDy <= Config::SWIPE_MAX_DY_PX &&
+        heldMs >= Config::SWIPE_MIN_HOLD_MS && horizontalDominant) {
+        return dx < 0 ? Gesture::SwipeLeft : Gesture::SwipeRight;
+    }
+
+    if (maxMove <= Config::TAP_MAX_MOVE_PX && heldMs >= Config::TAP_MIN_HOLD_MS &&
+        heldMs <= Config::TAP_MAX_HOLD_MS) {
+        tapOut = pressStart;
+        return Gesture::Tap;
+    }
+
+    // Weder sauberes Antippen noch gueltiger Wisch (z.B. missglueckte,
+    // zu kurze/zu schraege Wischgeste) - verfaellt ohne Wirkung.
+    return Gesture::None;
+}
+
 Calibration fit(const Point targets[4], const Point raws[4]) {
     Calibration result;
 

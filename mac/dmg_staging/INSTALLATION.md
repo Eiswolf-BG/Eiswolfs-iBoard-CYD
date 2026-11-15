@@ -3,7 +3,7 @@
 Eiswolfs iBoard schickt die Systemwerte deines Mac (CPU, GPU,
 Temperaturen, Lüfter, Akku/Leistung) an ein kleines Display (CYD), das
 sie live anzeigt. Diese Anleitung ist für Macs mit **Apple Silicon**
-(M1 oder neuer). Version 1.1.
+(M1 oder neuer). Version 1.2.
 
 ## 1. App installieren
 

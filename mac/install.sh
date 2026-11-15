@@ -28,4 +28,4 @@ launchctl load "$PLIST_DEST"
 
 echo "Eiswolfs-iBoard-Sender als LaunchAgent eingerichtet und gestartet."
 echo "Logs: $LOG_DIR/eiswolfsiboard.out.log / eiswolfsiboard.err.log"
-echo "Status pruefen: launchctl list | grep eiswolfsiboard"
+echo "Status pruefen: launchctl list | grep com.eiswolf.iboard"

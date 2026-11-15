@@ -39,6 +39,17 @@ namespace TouchCalib {
     // Liefert true genau einmal pro Beruehrung (beim Loslassen).
     bool wasTapped(Point& outPoint);
 
+    // Seiten-Wischen (Auftrag "Controls-Screen") - unterscheidet beim
+    // Loslassen EINER Beruehrung zwischen Antippen und Wischen (siehe
+    // Config::SWIPE_*). Eine als Wischen erkannte Beruehrung liefert
+    // NIE zusaetzlich Tap, und umgekehrt. Eigener, von wasTapped()
+    // komplett unabhaengiger Zustand (eigene statische Variablen in
+    // touch_calib.cpp) - nur EIN Aufrufer pro Bildschirm darf das
+    // gleichzeitig abfragen (Hauptscreen/Controls wechseln sich ab,
+    // beide sind eigene blockierende Schleifen).
+    enum class Gesture : uint8_t { None, Tap, SwipeLeft, SwipeRight };
+    Gesture pollGesture(Point& tapOut);
+
     // Berechnet aus 4 (rawPoint, screenTarget)-Paaren per kleinste-Quadrate
     // eine neue Calibration. targets/raws je 4 Eintraege.
     Calibration fit(const Point targets[4], const Point raws[4]);

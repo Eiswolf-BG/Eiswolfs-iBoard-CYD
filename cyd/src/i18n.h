@@ -59,8 +59,10 @@ enum class StringId : uint16_t {
     STATUS_NOT_CONNECTED,
     MENU_BUTTON,
 
-    // Ruhemodus-Rueckmeldung (PWR-Kachel, main.cpp)
-    PWR_SLEEP_FEEDBACK,
+    // "n/v"-Anzeige (Auftrag "Controls-Screen") - wiederverwendet auf
+    // allen drei interaktiven Controls-Kacheln (Acer/Mac/Luefter), wenn
+    // ein Befehl nicht bestaetigt wird bzw. die Kachel unkonfiguriert/
+    // nicht erreichbar ist.
     PWR_NOT_AVAILABLE,
 
     // Haupt-Menue (main.cpp::runMainMenu())
@@ -99,14 +101,16 @@ enum class StringId : uint16_t {
 
     // Wake-on-LAN fuer den Windows-Laptop (Auftrag, main.cpp) - Button-
     // Label im Einrichtung-Untermenue, Tastatur-Titel bei der MAC-
-    // Eingabe, kurze Kachel-Rueckmeldung nach dem Antippen.
+    // Eingabe. Seit Auftrag "Controls-Screen" gibt es dafuer keine
+    // eigene Text-Rueckmeldung mehr auf der Kachel, nur noch eine
+    // Farbe (siehe CLAUDE.md) - die frueheren WOL_SENT_FEEDBACK/
+    // SHUTDOWN_SENT_FEEDBACK-Eintraege wurden deshalb entfernt.
+    // Seit Auftrag "WoL-Geraete": bis zu 4 Geraete statt nur dem Acer -
+    // derselbe Eintrag dient weiterhin als Button-Label im Einrichtung-
+    // Untermenue UND als Titel der neuen Geraeteliste-Seite (gleiches
+    // Muster wie SETUP_BRIGHTNESS oben).
     SETUP_WOL_MAC,
     KB_WOL_MAC_PROMPT,
-    WOL_SENT_FEEDBACK,
-
-    // Windows-Laptop herunterfahren (Auftrag) - langes Halten derselben
-    // CPU-Temp-Kachel, kurze Rueckmeldung wie oben bei WOL_SENT_FEEDBACK.
-    SHUTDOWN_SENT_FEEDBACK,
 
     // "?"-Erklaerungen im Einrichtung-Untermenue (Auftrag "erklaere die
     // Menues") - je ein kurzer, mehrzeiliger Infotext (manuelle "\n"-
@@ -118,6 +122,63 @@ enum class StringId : uint16_t {
     SETUP_CAL_HELP,
     SETUP_BRIGHTNESS_HELP,
     SETUP_WOL_HELP,
+
+    // Schutz gegen Befehlswiederholung (Auftrag "Sicherheit und
+    // Lizenzen", Teil 2) - Resync-Menuepunkt + Bestaetigungstext.
+    SETUP_RESYNC,
+    SETUP_RESYNC_HELP,
+    RESYNC_SENT_FEEDBACK,
+
+    // Controls-Screen (Auftrag "Controls-Screen") - Titel oben, sowie der
+    // Text im Luefter-Koerper, wenn der Boost im Modus "Bis Tippen" laeuft
+    // (keine Restzeit bekannt, zeigt stattdessen diesen Text).
+    CONTROLS_TITLE,
+    FAN_BOOST_ON_INDEFINITE,
+
+    // WoL-Geraeteliste (Auftrag "WoL-Geraete", main.cpp) - Seite 3
+    // "Geraete", die Verwaltungsseite unter Einrichtung sowie das
+    // Hinzufuegen/Bearbeiten/Loeschen eines Eintrags.
+    DEVICES_PAGE_TITLE,
+    WOL_ADD_DEVICE,
+    WOL_NAME_PROMPT,
+    WOL_SHUTDOWN_IP_PROMPT,
+    WOL_INVALID_MAC,
+    WOL_EMPTY_NAME,
+    WOL_DELETE_CONFIRM_PREFIX,
+    CONFIRM_YES,
+    CONFIRM_NO,
+    WOL_SHUTDOWN_NOT_SET_UP,
+
+    // Auftrag "Monitor-Umschaltung" - neuer optionaler Schritt im WoL-
+    // Geraet-Bearbeiten/Hinzufuegen-Dialog (main.cpp::
+    // runWolDeviceEntryFlow()/runMonitorInputPicker()).
+    MONITOR_INPUT_TITLE,
+    MONITOR_INPUT_OFF,
+    MONITOR_INPUT_HDMI1,
+    MONITOR_INPUT_HDMI2,
+    MONITOR_INPUT_DP1,
+    MONITOR_INPUT_DP2,
+    MONITOR_INPUT_HELP,
+
+    // Auftrag "Alexa Aus" - neuer Ein/Aus-Schalter im Einrichtung-Menue
+    // (runSetupMenu()) plus Hilfetext und Hinweis bei fehlender IP.
+    ALEXA_SHUTDOWN_MENU,
+    ALEXA_SHUTDOWN_HELP,
+    ALEXA_SHUTDOWN_NO_IP,
+
+    // Release v1.2.0 - eigenes Alexa-Menue unter Einrichtung (runAlexaMenu()):
+    // Ein/Aus, Name, Hinweis, Neustart-Meldung. Texte mit "\n" von Hand
+    // umgebrochen (max. ca. 33 Zeichen je Zeile, siehe showHelpPopup()).
+    ALEXA_MENU_BUTTON,
+    ALEXA_MENU_HELP,
+    ALEXA_ENABLE_LABEL,
+    ALEXA_ENABLE_HELP,
+    ALEXA_NAME_LABEL,
+    ALEXA_NAME_HELP,
+    ALEXA_NAME_PROMPT,
+    ALEXA_NAME_FIXED,
+    ALEXA_HINT,
+    ALEXA_RESTART_TEXT,
 
     COUNT
 };

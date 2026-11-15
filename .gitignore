@@ -6,6 +6,7 @@ mac/*.pyc
 mac/logs/
 mac/.sender.lock
 mac/bundle_resources/macmon
+mac/bundle_resources/m1ddc
 dist/
 cyd/src/secrets.h
 .DS_Store
@@ -33,3 +34,43 @@ tools/fan-test/__pycache__/
 # windows/listener/main.go bzw. windows/installer/installer.nsi, siehe
 # windows/README.md. Nicht committen, nur als Release-Asset (wie dist/).
 windows/installer/*.exe
+
+# Auftrag "Sicherheit und Lizenzen": generische Haertungsmuster fuer
+# Geheimnis-Dateien in JEDEM Unterordner (cyd/mac/windows/tools/docs),
+# auch wenn aktuell keine solche Datei existiert - reine Vorsorge, falls
+# beim lokalen Bauen/Testen (z.B. windows/listener/ unter macOS/Linux)
+# je eine entsteht. Kein "config.example.json" o.ae. im Repo vorhanden,
+# das dadurch versehentlich verdeckt wuerde (geprueft per "git ls-files").
+**/secrets*
+**/*.token
+**/.env
+**/config.json
+
+# Lokaler Arbeitsordner fuer Migrations-/Aufraeum-Skripte, die Alex'
+# eigenen Mac betreffen (z.B. local/migrate-to-neutral-id.sh) - gehoeren
+# NIE ins oeffentliche Repo, auch wenn sie selbst keine Geheimnisse
+# enthalten (sie leiten den alten Benutzernamen zur Laufzeit aus der
+# Umgebung ab, stehen aber inhaltlich klar im Kontext "Alex' Mac").
+local/
+
+# Auftrag "Monitor-Eingang Machbarkeit": reine Testskripte/-werkzeuge fuer
+# den DDC/CI-Machbarkeitstest (m1ddc-Quelltext/-Binary, PowerShell-
+# Testskripte) - fliessen NICHT in die Firmware/Mac-App/Listener ein,
+# bleiben rein lokal, siehe CLAUDE.md.
+tools/ddc-test/
+
+# Lokale Entwickler-Werkzeuge (Auftrag "Modularer Listener", Schritt 3) -
+# generate_ui_font.py/preview_controls.py/generate_controls_icons.py
+# enthalten Alex' lokalen Home-Pfad bzw. Vorschau-Texte, waren bisher nie
+# "git add"et (reiner Zufall, kein Schutz) - jetzt zur Sicherheit explizit
+# ausgeschlossen. Die ERGEBNISSE dieser Skripte (ui_font.h, icon_*.h)
+# bleiben normal getrackt, nur die Skripte selbst nicht.
+cyd/tools/
+
+# Interne Arbeitsnotizen (Auftrag "Sicherheit und Lizenzen", 1b-2):
+# CLAUDE.md enthaelt Fortschritts-Abschnitte, Befehlsbeispiele und
+# Alex' eigene Entscheidungen - gehoert nicht in ein oeffentliches Repo.
+# Bleibt hier bewusst NUR als Vorsorge-Regel stehen (die Datei selbst
+# wird NICHT per "git rm --cached" entfernt - das entscheidet und macht
+# Alex selbst, siehe docs/DEVELOPMENT.md fuer die oeffentliche Variante).
+CLAUDE.md

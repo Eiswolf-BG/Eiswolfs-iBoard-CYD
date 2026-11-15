@@ -1,0 +1,25 @@
+ESP32 Arduino core (framework-arduinoespressif32) - LGPL-2.1
+
+The CYD firmware is built against Espressif's ESP32 Arduino core
+(the "framework = arduino" layer fetched automatically by PlatformIO
+when building cyd/, not vendored in this repo), which is licensed
+under the GNU Lesser General Public License, version 2.1:
+
+https://github.com/espressif/arduino-esp32/blob/master/LICENSE.md
+
+The LGPL requires that anyone receiving a binary linked against an
+LGPL library is able to obtain modified versions of that library and
+relink it. For an embedded target like this one (statically linked,
+no runtime dynamic linking), the accepted way to satisfy this is
+keeping the application's own source fully public (this repo) and
+building against the unmodified, publicly available upstream core -
+exactly what this project does. The core itself is not modified here;
+anyone can reproduce the exact same build via `cd cyd && pio run`
+(see docs/DEVELOPMENT.md), which fetches the same core version
+PlatformIO resolves from `cyd/platformio.ini`.
+
+The core itself also bundles several other components (FreeRTOS,
+lwIP, mbedTLS, and others, mostly under the Apache License 2.0 or
+similar permissive terms) - see Espressif's own repository for the
+complete breakdown, this project does not modify or redistribute them
+separately.

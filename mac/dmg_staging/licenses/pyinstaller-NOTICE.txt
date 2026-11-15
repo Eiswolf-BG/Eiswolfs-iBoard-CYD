@@ -1,0 +1,24 @@
+PyInstaller - GPLv2-or-later WITH a bootloader exception
+
+Eiswolfs iBoard's Mac app is packaged into a standalone .app bundle
+using PyInstaller (https://pyinstaller.org). PyInstaller itself is
+licensed under the GNU General Public License v2 or later, but it
+carries an explicit, additional exception for its "bootloader" (the
+small stub that starts a frozen app) that is embedded into every app
+PyInstaller builds:
+
+    "The bootloader [...] may be distributed under the terms of your
+    choosing, provided that you distribute it only in combination with
+    PyInstaller. [...] This exception does not however invalidate any
+    other reasons why the resulting executable file might be covered by
+    the GNU General Public License."
+
+In practice: this exception exists specifically so that PyInstaller can
+be used to build and distribute closed-source and other non-GPL
+software (including commercial ones) without that software itself
+being placed under the GPL. See:
+
+https://github.com/pyinstaller/pyinstaller/blob/develop/COPYING.txt
+
+for PyInstaller's own full license text and the exact wording of the
+exception.

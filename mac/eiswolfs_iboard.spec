@@ -7,13 +7,21 @@ import sys
 
 block_cipher = None
 
-APP_VERSION = "1.1"
+APP_VERSION = "1.2.0"
 
 a = Analysis(
     ["sender.py"],
     pathex=[],
-    binaries=[("bundle_resources/macmon", ".")],
-    datas=[("bundle_resources/macmon_LICENSE.txt", ".")],
+    binaries=[
+        ("bundle_resources/macmon", "."),
+        # Auftrag "Monitor-Umschaltung" - m1ddc (MIT-Lizenz,
+        # github.com/waydabber/m1ddc), siehe monitor_switch.py.
+        ("bundle_resources/m1ddc", "."),
+    ],
+    datas=[
+        ("bundle_resources/macmon_LICENSE.txt", "."),
+        ("bundle_resources/m1ddc_LICENSE.txt", "."),
+    ],
     hiddenimports=["rumps", "psutil", "serial", "serial.tools.list_ports"],
     hookspath=[],
     hooksconfig={},

@@ -12,6 +12,8 @@ zwischengespeicherten Schnappschuss - haengt macmon kurz, sendet der
 SenderThread einfach die letzten bekannten Werte weiter, ohne zu warten."""
 import fcntl
 import json
+import logging
+import logging.handlers
 import os
 import socket
 import subprocess
@@ -27,11 +29,13 @@ import fan_boost
 import i18n
 import login_item
 import mac_sleep
+import monitor_switch
 import token_share
+import wake_watch
 from usb_link import UsbLink
 
 
-APP_VERSION = "1.1"
+APP_VERSION = "1.2.0"
 
 # Application-Support-Ordner: fuer Logs/Lock-Datei, GEMEINSAM genutzt
 # von der Entwickler-Fassung (dieses venv-Projekt) und der gebauten
@@ -83,6 +87,45 @@ def _log(msg):
     print(f"[Eiswolfs iBoard] {msg}", flush=True)
 
 
+# Dauerhafte Ereignis-Log-Datei (Auftrag "Ruhezustand-Fix", Schritt 3) -
+# macmon-Neustarts, Schlaf-/Aufwach-Uebergaenge usw., damit sich das
+# Verhalten rund um Ruhezustand/DarkWake auch nachtraeglich nachvollziehen
+# laesst, OHNE je eine Meldung auf dem Bildschirm zu zeigen. Groesse auf
+# 1 MB begrenzt, eine rotierte Altdatei (RotatingFileHandler-Standard).
+_event_logger = None
+
+
+def _get_event_logger():
+    global _event_logger
+    if _event_logger is not None:
+        return _event_logger
+    logger = logging.getLogger("eiswolfs_iboard_events")
+    logger.setLevel(logging.INFO)
+    try:
+        log_dir = os.path.join(APP_SUPPORT_DIR, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, "events.log"), maxBytes=1_000_000, backupCount=1,
+        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        logger.addHandler(handler)
+    except OSError:
+        pass
+    _event_logger = logger
+    return logger
+
+
+def log_event(msg):
+    try:
+        _get_event_logger().info(msg)
+    except Exception:
+        pass
+    _log(msg)
+
+
+wake_watch.set_logger(log_event)
+
+
 # Waehlbare Werte fuer die Menueleisten-Anzeige (Auftrag "waehlbarer
 # Wert in der Menueleiste") - Reihenfolge hier bestimmt die Reihenfolge
 # im Untermenue. Schluessel muessen zu den Feldern im Sende-Payload
@@ -125,21 +168,34 @@ def format_menubar_title(item_key, payload):
     return "--"
 
 
+# Auftrag "Ruhezustand-Fix", Schritt 3: wie lange ohne frischen macmon-
+# Wert gilt als "haengt" (-> Neustart), und wie oft der Watchdog das
+# hoechstens von sich aus tun darf (die explizite restart()-Methode beim
+# Aufwachen ist davon ausgenommen, siehe unten).
+MACMON_STALE_SEC = 5.0
+MACMON_RESTART_MIN_GAP_SEC = 10.0
+
+
 class MacmonReader:
     """Liest macmon im Hintergrund aus (ein dauerhafter Subprozess statt
     einem Aufruf pro Sekunde) und haelt die letzten Werte bereit. Startet
-    den Prozess bei Bedarf neu, falls er abstuerzt - ein Fehler hier darf
-    die App nie zum Absturz bringen. self.latest bleibt beim Neustart
-    erhalten (wird nie zurueckgesetzt), damit kurze Aussetzer nicht zu
-    einem ploetzlichen Verlust aller Temperatur-/GPU-/Power-/Fan-Werte
-    fuehren."""
+    den Prozess bei Bedarf neu, falls er abstuerzt ODER haengt (siehe
+    _watchdog()) - ein Fehler hier darf die App nie zum Absturz bringen.
+    self.latest bleibt beim Neustart erhalten (wird nie zurueckgesetzt),
+    damit kurze Aussetzer nicht zu einem ploetzlichen Verlust aller
+    Temperatur-/GPU-/Power-/Fan-Werte fuehren."""
 
     def __init__(self):
         self.lock = threading.Lock()
         self.latest = {}
         self._stop = False
+        self._proc = None
+        self._last_update_monotonic = time.monotonic()
+        self._last_restart_monotonic = 0.0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        self._watchdog_thread = threading.Thread(target=self._watchdog, daemon=True)
+        self._watchdog_thread.start()
 
     def _run(self):
         macmon_bin = resource_path("macmon")
@@ -151,6 +207,8 @@ class MacmonReader:
                     stderr=subprocess.DEVNULL,
                     text=True,
                 )
+                with self.lock:
+                    self._proc = proc
                 for line in proc.stdout:
                     if self._stop:
                         break
@@ -158,8 +216,15 @@ class MacmonReader:
                         data = json.loads(line)
                         with self.lock:
                             self.latest = data
+                            self._last_update_monotonic = time.monotonic()
                     except (json.JSONDecodeError, ValueError):
                         continue
+                with self.lock:
+                    self._proc = None
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
                 proc.wait(timeout=1)
             except FileNotFoundError:
                 _log(f"macmon nicht gefunden unter {macmon_bin!r} - "
@@ -167,7 +232,42 @@ class MacmonReader:
                 return
             except Exception as exc:
                 _log(f"macmon-Subprozess-Fehler: {exc!r} - Neustart in 3s")
+                with self.lock:
+                    self._proc = None
                 time.sleep(3)
+
+    def _watchdog(self):
+        """Erkennt einen haengenden macmon-Prozess (laeuft noch, liefert
+        aber seit MACMON_STALE_SEC keine neue Zeile mehr) und erzwingt
+        per proc.kill() ein EOF auf dem Pipe, damit die blockierende
+        Zeilen-Schleife in _run() sich beendet und neu startet."""
+        while not self._stop:
+            time.sleep(1.0)
+            with self.lock:
+                stale = (time.monotonic() - self._last_update_monotonic) > MACMON_STALE_SEC
+            if stale:
+                self._restart("kein Wert seit 5s")
+
+    def _restart(self, reason, bypass_rate_limit=False):
+        now = time.monotonic()
+        with self.lock:
+            if not bypass_rate_limit and (now - self._last_restart_monotonic) < MACMON_RESTART_MIN_GAP_SEC:
+                return
+            self._last_restart_monotonic = now
+            self._last_update_monotonic = now  # verhindert sofortiges erneutes Ausloesen
+            proc = self._proc
+        log_event(f"macmon neu: {reason}")
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def restart(self):
+        """Von aussen aufgerufen (z.B. direkt beim Aufwachen) - erzwingt
+        sofort einen Neustart, unabhaengig von der 10s-Sperre zwischen
+        zwei automatischen Watchdog-Neustarts."""
+        self._restart("nach Aufwachen", bypass_rate_limit=True)
 
     def snapshot(self):
         with self.lock:
@@ -175,6 +275,13 @@ class MacmonReader:
 
     def stop(self):
         self._stop = True
+        with self.lock:
+            proc = self._proc
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
 
 def safe_get(d, *keys, default=None):
@@ -187,12 +294,17 @@ def safe_get(d, *keys, default=None):
 
 
 class SenderThread(threading.Thread):
-    def __init__(self, macmon, usb_link, fan_boost_client, cyd_cmd_listener):
+    def __init__(self, macmon, usb_link, fan_boost_client, cyd_cmd_listener, is_awake_fn=None):
         super().__init__(daemon=True)
         self.macmon = macmon
         self.usb_link = usb_link
         self.fan_boost_client = fan_boost_client
         self.cyd_cmd_listener = cyd_cmd_listener
+        # Auftrag "Ruhezustand-Fix", Schritt 2: liefert False waehrend
+        # Systemschlaf UND DarkWake (siehe wake_watch.py) - in dem
+        # Fenster verlaesst kein Paket mehr den Mac. Ohne Angabe (z.B.
+        # falls PyObjC fehlt) gilt wie bisher "immer wach".
+        self.is_awake_fn = is_awake_fn or (lambda: True)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.lock = threading.Lock()
@@ -204,6 +316,11 @@ class SenderThread(threading.Thread):
         # SOEBEN gesendeter SLEEP-Befehl tatsaechlich angekommen ist, auch
         # wenn zwischendurch kein anderes Feld sich aendert.
         self.sleep_ack_counter = 0
+        # Auftrag "Monitor-Umschaltung" - additiv, exakt gleiches Muster
+        # wie sleep_ack_counter: das CYD erkennt am Hochzaehlen (nicht
+        # am reinen Vorhandensein), dass ein soeben gesendeter MONITOR-
+        # Befehl tatsaechlich angekommen ist.
+        self.monitor_ack_counter = 0
         self._last_send_monotonic = None
         self._log_fh = None
         # Unicast-Fallback (Messung 29.10.: Broadcast kam im Netz nur zu
@@ -238,6 +355,35 @@ class SenderThread(threading.Thread):
         with self.lock:
             self.sleep_ack_counter += 1
 
+    def bump_monitor_ack(self):
+        """Von CydCommandListener.on_monitor (anderer Thread) aufgerufen,
+        sobald ein gueltiger MONITOR-Befehl verarbeitet wurde (Auftrag
+        "Monitor-Umschaltung") - bestaetigt nur "angekommen", nicht
+        "DDC sicher gelungen" (das laeuft asynchron weiter, siehe
+        monitor_switch.py)."""
+        with self.lock:
+            self.monitor_ack_counter += 1
+
+    def send_now(self):
+        """Sendet SOFORT, ausserhalb des normalen 1Hz-Takts und
+        unabhaengig von Pause-/Wach-Zustand (Auftrag "Ruhezustand-Fix",
+        Schritt 2: die SLEEP-Bestaetigung MUSS das CYD noch VOR dem
+        tatsaechlichen Einschlafen erreichen - "pmset sleepnow" kann
+        sonst schneller wirken als der naechste regulaere Sendetick)."""
+        payload = self._collect()
+        with self.lock:
+            self.latest_payload = payload
+        try:
+            self._send(payload)
+        except Exception as exc:
+            _log(f"Fehler beim Sofort-Senden (Sleep-Bestaetigung): {exc!r}")
+        if self.usb_link.is_connected():
+            try:
+                self.usb_link.write_line(json.dumps(payload))
+                mark_cyd_contact()
+            except Exception as exc:
+                _log(f"Fehler beim Sofort-Senden per USB: {exc!r}")
+
     def _collect(self):
         payload = {
             "cpu_pct": psutil.cpu_percent(interval=None),
@@ -255,6 +401,9 @@ class SenderThread(threading.Thread):
             # Auftrag "Ruhemodus" - neues, abwaertskompatibles Feld, siehe
             # bump_sleep_ack(). Bestehende Felder bleiben unveraendert.
             "sleep_ack": self.sleep_ack_counter,
+            # Auftrag "Monitor-Umschaltung" - neues, abwaertskompatibles
+            # Feld wie sleep_ack oben.
+            "monitor_ack": self.monitor_ack_counter,
         }
 
         mm = self.macmon.snapshot()
@@ -323,6 +472,17 @@ class SenderThread(threading.Thread):
 
         next_tick = time.monotonic()
         while not self._stop:
+            # Sendepause waehrend Systemschlaf/DarkWake (Auftrag
+            # "Ruhezustand-Fix", Schritt 2) - es wird in diesem Fenster
+            # weder gemessen noch gesendet. next_tick wird bei jeder
+            # Pruefung neu auf "jetzt" gesetzt, damit nach dem Aufwachen
+            # sofort (nicht erst beim naechsten regulaeren Tick) wieder
+            # gesendet wird - deutlich unter den geforderten 2s.
+            if not self.is_awake_fn():
+                time.sleep(0.3)
+                next_tick = time.monotonic()
+                continue
+
             t0 = time.monotonic()
             try:
                 payload = self._collect()
@@ -443,10 +603,14 @@ class IBoardApp(rumps.App):
         )
         self.fan_boost_sec = config.get_fan_boost_sec()
         self.fan_boost_rpm = config.get_fan_boost_rpm()
+        # Auftrag "Monitor-Umschaltung" - eigener Switcher-Zustand (Rate-
+        # Begrenzung ueber mehrere Befehle hinweg), siehe monitor_switch.py.
+        self.monitor_switch = monitor_switch.MonitorSwitcher()
         self.cyd_cmd_listener = fan_boost.CydCommandListener(
             on_boost=self._on_cyd_fan_boost,
             on_auto=self._on_cyd_fan_auto,
             on_sleep=self._on_cyd_sleep,
+            on_monitor=self._on_cyd_monitor,
         )
 
         self.fan_boost_menu = rumps.MenuItem(i18n.t("fan_boost_menu"))
@@ -498,6 +662,48 @@ class IBoardApp(rumps.App):
         # zwischen zwei Rechnern abzutippen.
         self.share_token_item = rumps.MenuItem(i18n.t("share_token_menu"), callback=self.share_token)
 
+        # Schutz gegen Befehlswiederholung (Auftrag "Sicherheit und
+        # Lizenzen", Teil 2) - eigenes Untermenue.
+        self.security_menu = rumps.MenuItem(i18n.t("security_menu"))
+        self.resync_item = rumps.MenuItem(i18n.t("resync_menu"), callback=self.allow_resync)
+        self.security_menu.add(self.resync_item)
+        self.legacy_item = rumps.MenuItem(i18n.t("legacy_menu"), callback=self.toggle_legacy)
+        self.legacy_item.state = config.get_allow_legacy_commands()
+        self.security_menu.add(self.legacy_item)
+
+        # Auftrag "Monitor-Umschaltung": Ein/Aus, Bildschirmauswahl (per
+        # UUID, siehe config.py/monitor_switch.py - Sicherheitsgrenze
+        # "nur der ausgewaehlte Bildschirm"), die vier VCP-0x60-
+        # Rohwerte, und ein Test-Knopf mit automatischem Zurueckschalten.
+        self.monitor_enabled_item = rumps.MenuItem(i18n.t("monitor_enabled"), callback=self.toggle_monitor_switch)
+        self.monitor_enabled_item.state = config.get_monitor_switch_enabled()
+
+        self.monitor_screen_menu = rumps.MenuItem(i18n.t("monitor_screen_menu"))
+        self._rebuild_monitor_screen_menu()
+
+        self.monitor_values_menu = rumps.MenuItem(i18n.t("monitor_values_menu"))
+        self.monitor_value_items = {}
+        for logical, key in (
+            (1, "monitor_value_hdmi1"), (2, "monitor_value_hdmi2"),
+            (3, "monitor_value_dp1"), (4, "monitor_value_dp2"),
+        ):
+            item = rumps.MenuItem(
+                i18n.t(key, value=config.get_monitor_vcp_value(logical)),
+                callback=self.edit_monitor_value,
+            )
+            item.monitor_logical_input = logical
+            item.monitor_label_key = key
+            self.monitor_values_menu.add(item)
+            self.monitor_value_items[logical] = item
+
+        self.monitor_test_item = rumps.MenuItem(i18n.t("monitor_test_item"), callback=self.test_monitor_switch)
+
+        self.monitor_menu = rumps.MenuItem(i18n.t("monitor_menu"))
+        self.monitor_menu.add(self.monitor_enabled_item)
+        self.monitor_menu.add(self.monitor_screen_menu)
+        self.monitor_menu.add(self.monitor_values_menu)
+        self.monitor_menu.add(self.monitor_test_item)
+
         menu_items = [
             self.link_item,
             self.cpu_item,
@@ -518,7 +724,9 @@ class IBoardApp(rumps.App):
             None,
             self.fan_boost_menu,
             self.sleep_item,
+            self.monitor_menu,
             self.share_token_item,
+            self.security_menu,
         ]
 
         # "Beim Login starten" nur sinnvoll/verfuegbar, wenn das hier
@@ -542,7 +750,18 @@ class IBoardApp(rumps.App):
 
         self.macmon = MacmonReader()
         self.usb_link = UsbLink()
-        self.sender = SenderThread(self.macmon, self.usb_link, self.fan_boost, self.cyd_cmd_listener)
+        # Auftrag "Ruhezustand-Fix", Schritt 2+3: eigenstaendige Erkennung
+        # von Systemschlaf/DarkWake (siehe wake_watch.py), UNABHAENGIG
+        # vom bestehenden _install_sleep_watcher()/_on_system_sleep()
+        # weiter unten (der kuemmert sich nur um den Luefter-Boost und
+        # bleibt bewusst unveraendert). Beim Aufwachen wird macmon sofort
+        # neu gestartet, auch wenn der letzte Watchdog-Neustart noch
+        # keine 10s her ist.
+        self._wake_watcher = wake_watch.WakeWatcher(on_wake=self.macmon.restart)
+        self.sender = SenderThread(
+            self.macmon, self.usb_link, self.fan_boost, self.cyd_cmd_listener,
+            is_awake_fn=self._wake_watcher.is_awake,
+        )
         self.sender.start()
 
         # Reine UI-Aktualisierung (Menueleiste) - liest nur den
@@ -636,6 +855,16 @@ class IBoardApp(rumps.App):
             self.login_item_menu.title = i18n.t("login_item")
         self.sleep_item.title = i18n.t("sleep_now")
         self.share_token_item.title = i18n.t("share_token_menu")
+        self.security_menu.title = i18n.t("security_menu")
+        self.resync_item.title = i18n.t("resync_menu")
+        self.legacy_item.title = i18n.t("legacy_menu")
+        self.monitor_menu.title = i18n.t("monitor_menu")
+        self.monitor_enabled_item.title = i18n.t("monitor_enabled")
+        self.monitor_screen_menu.title = i18n.t("monitor_screen_menu")
+        self.monitor_values_menu.title = i18n.t("monitor_values_menu")
+        for logical, item in self.monitor_value_items.items():
+            item.title = i18n.t(item.monitor_label_key, value=config.get_monitor_vcp_value(logical))
+        self.monitor_test_item.title = i18n.t("monitor_test_item")
         self.quit_item.title = i18n.t("quit")
         self.update_ui(None)
 
@@ -672,11 +901,98 @@ class IBoardApp(rumps.App):
         # Zeile) - sleep_ack wird IMMER hochgezaehlt, sobald der Befehl
         # hier ankam (bestaetigt dem CYD "angekommen", nicht "Sleep
         # garantiert sichtbar gelungen" - siehe mac_sleep.sleep_now()).
-        self._do_sleep()
+        # Reihenfolge seit Auftrag "Ruhezustand-Fix" bewusst: Zaehler
+        # hochzaehlen UND sofort (ausserhalb des normalen Takts) senden,
+        # BEVOR "pmset sleepnow" ausgeloest wird - sonst kann der Mac
+        # schon schlafen, bevor der naechste regulaere Sendetick die
+        # Bestaetigung ueberhaupt verschickt haette.
         self.sender.bump_sleep_ack()
+        self.sender.send_now()
+        self._do_sleep()
 
     def trigger_sleep_now(self, _sender):
         self._do_sleep()
+
+    def _on_cyd_monitor(self, logical_input):
+        # Auftrag "Monitor-Umschaltung" - gleiche Reihenfolge wie bei
+        # _on_cyd_sleep: Quittung ZUERST (hochzaehlen + sofort senden),
+        # damit das CYD nicht unnoetig auf den vollen 2s-Timeout wartet,
+        # DANACH der eigentliche (asynchrone) DDC-Schreibvorgang.
+        self.sender.bump_monitor_ack()
+        self.sender.send_now()
+        self.monitor_switch.request(logical_input)
+
+    def toggle_monitor_switch(self, sender):
+        enabled = not config.get_monitor_switch_enabled()
+        config.set_monitor_switch_enabled(enabled)
+        sender.state = enabled
+
+    def _rebuild_monitor_screen_menu(self):
+        """Baut die Bildschirmliste im Untermenue neu auf (beim Start
+        UND ueber "Bildschirme neu suchen") - ruft m1ddc jedes Mal neu
+        auf, damit neu angeschlossene/umbenannte Bildschirme auftauchen."""
+        try:
+            self.monitor_screen_menu.clear()
+        except AttributeError:
+            # rumps legt das interne NSMenu-Untermenue erst beim ERSTEN
+            # .add() an (siehe rumps.py::MenuItem.__setitem__) - beim
+            # allerersten Aufruf hier (noch nie etwas hinzugefuegt) ist
+            # .clear() daher ein Fehlgriff, kein echter Fehlerzustand.
+            pass
+        rescan_item = rumps.MenuItem(i18n.t("monitor_screen_rescan"), callback=self.rescan_monitor_screens)
+        self.monitor_screen_menu.add(rescan_item)
+        self.monitor_screen_menu.add(None)
+
+        screens = monitor_switch.list_screens()
+        current_uuid = config.get_monitor_switch_screen_uuid()
+        if not screens:
+            none_item = rumps.MenuItem(i18n.t("monitor_screen_none"))
+            none_item.set_callback(None)
+            self.monitor_screen_menu.add(none_item)
+            return
+        for uuid, name in screens:
+            item = rumps.MenuItem(name, callback=self.select_monitor_screen)
+            item.monitor_screen_uuid = uuid
+            item.monitor_screen_name = name
+            item.state = (uuid == current_uuid)
+            self.monitor_screen_menu.add(item)
+
+    def rescan_monitor_screens(self, _sender):
+        self._rebuild_monitor_screen_menu()
+
+    def select_monitor_screen(self, sender):
+        config.set_monitor_switch_screen(sender.monitor_screen_uuid, sender.monitor_screen_name)
+        for item in self.monitor_screen_menu.values():
+            if hasattr(item, "monitor_screen_uuid"):
+                item.state = (item is sender)
+
+    def edit_monitor_value(self, sender):
+        current = config.get_monitor_vcp_value(sender.monitor_logical_input)
+        response = rumps.Window(
+            message=i18n.t("monitor_value_prompt_msg"),
+            title=i18n.t("monitor_value_prompt_title"),
+            default_text=str(current),
+            ok=i18n.t("dialog_ok"),
+            cancel=i18n.t("dialog_cancel"),
+            dimensions=(220, 24),
+        ).run()
+        if not response.clicked:
+            return
+        try:
+            value = int(response.text.strip())
+        except ValueError:
+            return
+        if not (0 <= value <= 65535):
+            return
+        config.set_monitor_vcp_value(sender.monitor_logical_input, value)
+        sender.title = i18n.t(sender.monitor_label_key, value=value)
+
+    def test_monitor_switch(self, _sender):
+        ok, err_key = self.monitor_switch.test_switch_to_hdmi2()
+        if ok:
+            rumps.alert(i18n.t("alert_title"), i18n.t("monitor_test_started"))
+        else:
+            rumps.alert(i18n.t("alert_title"), i18n.t(err_key))
 
     def share_token(self, _sender):
         """Startet die einmalige, 60s befristete lokale Freigabe der
@@ -696,6 +1012,23 @@ class IBoardApp(rumps.App):
 
         url = token_share.start(on_done=_on_done)
         rumps.alert(i18n.t("alert_title"), i18n.t("share_token_body", url=url))
+
+    def allow_resync(self, _sender):
+        """Oeffnet ein 60s-Fenster, in dem das CYD seinen Befehlszaehler
+        neu setzen darf (Auftrag "Sicherheit und Lizenzen", Teil 2b) -
+        fuer den Fall, dass das Geraet seinen eigenen Zaehler verloren
+        hat (z.B. Werksreset). Am Geraet: Menue -> Einrichtung ->
+        "Zaehler neu abgleichen" ANTIPPEN, WAEHREND dieses Fenster
+        offen ist."""
+        self.cyd_cmd_listener.allow_resync()
+        rumps.alert(i18n.t("alert_title"), i18n.t("resync_alert_body"))
+
+    def toggle_legacy(self, sender):
+        new_value = not config.get_allow_legacy_commands()
+        config.set_allow_legacy_commands(new_value)
+        sender.state = new_value
+        if new_value:
+            rumps.alert(i18n.t("alert_title"), i18n.t("legacy_warning"))
 
     def toggle_fan_boost(self, sender):
         if self.fan_boost.is_active():

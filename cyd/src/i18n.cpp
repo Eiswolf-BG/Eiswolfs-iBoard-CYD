@@ -12,7 +12,7 @@ static const char* const I18N_DE[] = {
     "Unten links",
     "Kalibrierung fehlgeschlagen",
     "Wird wiederholt...",
-    "Testpunkt beruehren",
+    "Testpunkt berühren",
     "Kalibrierung gespeichert",
     "Testpunkt verfehlt",
 
@@ -23,20 +23,20 @@ static const char* const I18N_DE[] = {
     "SPACE",
     "Anzeigen",
     "Verbergen",
-    "Zurueck",
+    "Zurück",
     "Weiter",
     "WLAN-Name eingeben",
     "Passwort fuer ",
 
     "Suche WLAN-Netzwerke...",
-    "WLAN waehlen",
+    "WLAN wählen",
     "(verborgen)",
     "Neu suchen",
     "Manuell eingeben",
     "Verbinde mit:",
     "Verbunden!",
     "Verbindung fehlgeschlagen",
-    "Zurueck zur Eingabe",
+    "Zurück zur Eingabe",
 
     "Sprache / Language",
 
@@ -47,12 +47,11 @@ static const char* const I18N_DE[] = {
     "Status: ",
     "verbunden",
     "nicht verbunden",
-    "Menue",
+    "Menü",
 
-    "RUHE ...",
     "n/v",
 
-    "Eiswolfs iBoard Menue",
+    "Eiswolfs iBoard Menü",
     "Verbindung:",
     "Schrift:",
     "Auto",
@@ -60,16 +59,16 @@ static const char* const I18N_DE[] = {
     "USB",
     "Pixel",
     "Klar",
-    "Luefter",
+    "Lüfter",
     "Einrichtung",
     "Sprache: ",
-    "Zurueck",
+    "Zurück",
 
     "Einrichtung",
-    "Nur WLAN aendern",
+    "Nur WLAN ändern",
     "Touch neu kalibrieren",
 
-    "Luefter-Boost",
+    "Lüfter-Boost",
     "30 Sek.",
     "1 Min.",
     "2 Min.",
@@ -80,17 +79,55 @@ static const char* const I18N_DE[] = {
 
     "Helligkeit",
 
-    "WoL-MAC",
+    "WoL-Geräte",
     "MAC-Adresse eingeben",
-    "WOL...",
-
-    "AUS...",
 
     "OK",
-    "Aendert nur das WLAN-Netzwerk.\nTouch-Kalibrierung bleibt\nunveraendert erhalten.",
-    "Startet die Touch-Kalibrierung\nneu (vier Eckpunkte antippen).\nWLAN bleibt unveraendert.",
+    "Ändert nur das WLAN-Netzwerk.\nTouch-Kalibrierung bleibt\nunverändert erhalten.",
+    "Startet die Touch-Kalibrierung\nneu (vier Eckpunkte antippen).\nWLAN bleibt unverändert.",
     "Stellt die Display-Helligkeit\nin 10%-Schritten ein (10-100%).",
-    "Antippen der CPU-Temp-Kachel\nweckt danach den Laptop (WoL).\nLanges Halten faehrt ihn runter.\nMAC-Adresse hier eintragen,\nFormat AA:BB:CC:DD:EE:FF.",
+    "Bis zu 4 Geräte verwalten:\nName/MAC ändern, per rotem X\nlöschen, unten hinzufügen.\nAntippen = wecken (WoL), langes\nHalten = ausschalten (falls dafür\neine IP eingetragen wurde).",
+
+    "Zähler neu abgleichen",
+    "Nur nötig, falls Lüfter-Boost/\nRuhemodus/Shutdown nach einem\nWerksreset nicht mehr reagieren.\nMac-App/Windows-Listener müssen\ndafür zuerst im jeweiligen Menü\nauf Empfang gestellt werden.",
+    "Gesendet...",
+
+    "Controls",
+    "AN",
+
+    "Geräte",
+    "Gerät hinzufügen",
+    "Name eingeben",
+    "IP fürs Ausschalten (optional, Zurück = überspringen)",
+    "Ungültige MAC-Adresse",
+    "Name darf nicht leer sein",
+    "Wirklich löschen: ",
+    "Ja",
+    "Nein",
+    "Ausschalten nicht eingerichtet",
+
+    "Monitor beim Einschalten",
+    "Aus",
+    "HDMI 1",
+    "HDMI 2",
+    "DisplayPort 1",
+    "DisplayPort 2",
+    "Schaltet den Monitor beim Einschalten dieses Geräts automatisch auf den gewählten Eingang um (per DDC/CI über die Mac-App). \"Aus\" lässt den Monitor unverändert.",
+
+    "Alexa: Ausschalten",
+    "Ein: \"Alexa, schalte [Name] aus\"\nfährt den Laptop herunter\n(Windows-Listener, inkl. Monitor-\nRückschaltung).\nAus (Standard): Befehl ohne\nWirkung. Nur einschalten, wenn\nAlexa ihn zuverlässig versteht.",
+    "IP nötig zum Herunterfahren",
+
+    "Alexa",
+    "Alexa-Sprachsteuerung für das\nerste Gerät. Standard: Aus.\nEinschalten, Name wählen, dann in\nder Alexa-App Geräte suchen.\nÄnderung: iBoard startet neu.",
+    "Alexa einschalten",
+    "Ein: Das iBoard meldet sich im\nHeimnetz als Lampe, Alexa\nkann \"an\" und \"aus\" senden.\nAus (Standard): Es läuft nichts,\nkein Dienst, kein offener Port.\nÄnderung: iBoard startet neu.",
+    "Name: ",
+    "Unter diesem Namen findet Alexa\ndas Gerät, z. B. \"Laptop\".\nDann: \"Alexa, schalte Laptop an\".\nErlaubt: Buchstaben, Ziffern,\nLeerzeichen, Bindestrich.\nNach Änderung: Geräte neu suchen.",
+    "Alexa-Name eingeben",
+    "Nicht erlaubte Zeichen\nwurden entfernt.",
+    "Danach in der Alexa-App:\nGeräte suchen",
+    "Gespeichert.\nDas iBoard startet neu.",
 };
 
 static const char* const I18N_EN[] = {
@@ -132,7 +169,7 @@ static const char* const I18N_EN[] = {
     "Sprache / Language",
 
     "No connection",
-    "to the Mac",
+    "to Mac",
     "WiFi: ",
     "IP: ",
     "Status: ",
@@ -140,7 +177,6 @@ static const char* const I18N_EN[] = {
     "not connected",
     "Menu",
 
-    "SLEEP...",
     "n/a",
 
     "Eiswolfs iBoard Menu",
@@ -171,17 +207,55 @@ static const char* const I18N_EN[] = {
 
     "Brightness",
 
-    "WoL MAC",
+    "WoL devices",
     "Enter MAC address",
-    "WOL...",
-
-    "OFF...",
 
     "OK",
     "Changes only the WiFi network.\nTouch calibration stays\nunchanged.",
     "Restarts touch calibration\n(tap the four corner points).\nWiFi stays unchanged.",
     "Adjusts display brightness\nin 10% steps (10-100%).",
-    "Tapping the CPU-temp tile\nwakes the laptop (WoL).\nLong-press shuts it down.\nEnter its MAC address here,\nformat AA:BB:CC:DD:EE:FF.",
+    "Manage up to 4 devices:\nchange name/MAC, delete with\nthe red X, add one below. Tap\nto wake (WoL), long-press to\nshut down (if an IP was set).",
+
+    "Resync counter",
+    "Only needed if fan boost/sleep/\nshutdown stop responding after\na factory reset. The Mac app/\nWindows listener must first be\nset to listen in their own menu.",
+    "Sent...",
+
+    "Controls",
+    "ON",
+
+    "Devices",
+    "Add device",
+    "Enter name",
+    "Shutdown IP (optional, Back = skip)",
+    "Invalid MAC address",
+    "Name cannot be empty",
+    "Really delete: ",
+    "Yes",
+    "No",
+    "Shutdown not set up",
+
+    "Monitor on power-on",
+    "Off",
+    "HDMI 1",
+    "HDMI 2",
+    "DisplayPort 1",
+    "DisplayPort 2",
+    "Automatically switches the monitor to the selected input when this device powers on (via DDC/CI through the Mac app). \"Off\" leaves the monitor unchanged.",
+
+    "Alexa: Shutdown",
+    "On: \"Alexa, turn off [name]\"\nshuts the laptop down (via the\nWindows listener, incl. switching\nthe monitor back).\nOff (default): the command does\nnothing. Only enable once Alexa\nreliably understands it.",
+    "IP needed to shut down",
+
+    "Alexa",
+    "Voice control via Alexa for the\nfirst device. Default: Off.\nTurn on, pick a name, then search\nfor devices in the Alexa app.\nChanges restart the iBoard.",
+    "Enable Alexa",
+    "On: the iBoard shows up in your\nhome network as a light and\nAlexa can send \"on\" and \"off\".\nOff (default): nothing runs, no\nservice and no open port.\nChanging it restarts the iBoard.",
+    "Name: ",
+    "Alexa finds the device under this\nname, e.g. \"Laptop\".\nSay: \"Alexa, turn on Laptop\".\nAllowed: letters, digits,\nspaces, hyphen.\nAfter a change: search again.",
+    "Enter Alexa name",
+    "Disallowed characters\nwere removed.",
+    "Afterwards in the Alexa app:\nSearch for devices",
+    "Saved.\nThe iBoard is restarting.",
 };
 
 static_assert(sizeof(I18N_DE) / sizeof(I18N_DE[0]) == (size_t)StringId::COUNT,

@@ -11,14 +11,67 @@ Fan boost, sleep, and the Windows shutdown listener are gated by a
 
 It's not a password for anything online — it never leaves your local
 network. Its only job is to stop a random device on your WiFi from
-accidentally (or deliberately) sending your Mac to sleep or shutting
-down your Windows laptop by guessing a plain command. The CYD attaches
-it to every command it sends; the receiving side only acts on the
-command if the token matches.
+accidentally (or deliberately) sending your Mac to sleep, boosting the
+fan, or shutting down your Windows laptop.
 
 Wake-on-LAN (waking the Windows laptop) does **not** use this token —
 it's a plain WoL magic packet, which has no concept of authentication
 at all (see [README.md](../README.md)).
+
+## Replay protection (what the token actually protects)
+
+**This is not encryption.** Every command the CYD sends (fan boost,
+sleep, shutdown) still travels as plain, readable text over WiFi/USB —
+anyone capturing your network traffic can see exactly what command was
+sent. What the token *does* protect against: someone **forging** a
+command (they'd need the token to produce a valid signature) or
+**replaying** a captured command later to trigger it again (each
+command carries a counter that only ever goes up; a repeated or
+out-of-order counter is silently ignored).
+
+Technically: each command ends in `<counter> <hmac>` instead of the
+raw token — `hmac` is the first 16 hex characters of an HMAC-SHA256
+over the command text and counter, keyed with your token. The CYD
+keeps its own counter on its SD card/internal storage and always sends
+a higher one than last time; the receiving side (Mac app, Windows
+listener) remembers the highest counter it has accepted and rejects
+anything equal or lower. The token itself never travels over the
+network at all anymore — only this signature, which doesn't reveal it.
+
+**Limits, honestly**: this protects against casual/opportunistic
+replay on your own LAN, not against a determined attacker who's
+already on your network and watching in real time (they can still see
+*when* you send a command, just not forge a new one or make an old one
+fire again). It's proportionate to the actual risk here — a home
+automation convenience feature, not a safety-critical system.
+
+### Resync
+
+If the CYD ever loses its own counter (most likely after a factory
+reset) and fan boost/sleep/shutdown stop responding, each receiver has
+a matching "allow resync" switch, open for 60 seconds:
+
+- **Mac app**: menu → Security → "Allow counter resync (60s)…"
+- **Windows listener**: tray icon → "Zähler-Resync zulassen (60s)"
+
+Open it, then immediately tap "Resync counter" in the CYD's own menu
+(Setup page) — within that window, the receiver accepts the CYD's new
+counter as the fresh baseline, no matter its value. Outside that
+window, a RESYNC command is treated like any other and ignored if it
+isn't higher than before. This has to be a deliberate, physical action
+on the receiving side by design — the CYD alone can never prove its
+new counter is legitimately higher after losing its history.
+
+### Old firmware / app during the upgrade
+
+If you updated the CYD firmware but haven't updated the Mac app and/or
+Windows listener yet (or the other way around), commands will simply
+stop working (old clear-text tokens are rejected by new receivers, and
+vice versa) rather than silently falling back to something less safe.
+Each receiver has an **"allow old, unsigned commands"** switch (off by
+default) for a short transition if you really can't update everything
+at once — turning it on removes replay protection entirely for that
+receiver until you turn it back off, so only use it briefly.
 
 ## Picking a token
 
@@ -75,9 +128,15 @@ feature (`windows/`, see [windows/README.md](../windows/README.md)).
 "Send token to Windows…", depending on your chosen app language):
 shows a local-network address, valid for 60 seconds - open it in a
 browser on the Windows laptop, and it downloads a ready-made
-`config.json` with the token already filled in. Move the downloaded
-file to `%APPDATA%\EiswolfsIBoard\config.json` (replacing the empty
-one the installer created) and you're done - no typing involved.
+`config.json` that contains **only the token**. **Do not overwrite
+your listener's `config.json` with it** - that file also holds the
+device name, port and monitor-switching settings, which would be lost.
+Instead open the listener's tray menu → "Einstellungen..." and use
+**"From file..." / "Aus Datei wählen…"** to pick the downloaded file:
+only the token is taken over, everything else stays. (On a fresh
+install, where there are no other settings yet, copying the file to
+`%APPDATA%\EiswolfsIBoard\config.json` works too.) Then click "Token
+neu laden" in the tray menu - no typing involved.
 
 **Manual way**, if you'd rather not use that (or on a Mac without the
 app running): edit the file yourself with any text editor:

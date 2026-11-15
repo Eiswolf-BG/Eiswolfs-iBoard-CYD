@@ -66,3 +66,30 @@ sudo launchctl print system/com.eiswolf.iboard.fanhelper
 ```
 
 Logs: `/Library/Logs/eiswolfsiboard-fanhelper.log` and `.err.log`.
+
+## If the fan seems stuck
+
+There's no separate "reset" command needed — sending `AUTO` (the Mac
+app's menu, or the CYD's own fan tile) always takes priority and puts
+the fan straight back under macOS's normal automatic control, and the
+helper does the same thing on its own if nothing talks to it for more
+than 10 seconds (see the watchdog above). If something still looks
+wrong, a normal restart of the Mac resets the SMC's fan state
+unconditionally — that always works, no matter what this helper is
+doing.
+
+## Use at your own risk
+
+This helper writes directly to the SMC (System Management Controller)
+with root privileges — that's inherently a more sensitive thing to run
+than the rest of Eiswolfs iBoard, which is why it's a separate,
+optional, uninstallable piece instead of being bundled into the main
+app. It's provided as-is, with no warranty — see
+[LICENSE](../../LICENSE). The built-in limits above (never below
+automatic, never above the hardware maximum, watchdog, 4-hour cap) are
+there specifically to keep a stuck or wrong signal from doing anything
+worse than running the fan faster than usual.
+
+The underlying SMC read/write approach was verified against the open,
+MIT-licensed [MacFanControl](https://github.com/raminsharifi/MacFanControl)
+reference code — see [THIRD-PARTY-LICENSES.md](../../THIRD-PARTY-LICENSES.md).

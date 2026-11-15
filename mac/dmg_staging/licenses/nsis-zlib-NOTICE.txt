@@ -1,0 +1,9 @@
+NSIS (Nullsoft Scriptable Install System) - zlib/libpng license
+
+The Windows installer (EiswolfsIBoardListener-Setup.exe) is built with NSIS and
+contains the NSIS installer stub. NSIS is licensed under the zlib/libpng license
+(with parts under bzip2 and CPL for some compression plugins). Redistribution of
+the generated installers is permitted without further obligations beyond keeping
+this notice:
+
+https://nsis.sourceforge.io/License

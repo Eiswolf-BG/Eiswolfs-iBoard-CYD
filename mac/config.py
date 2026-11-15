@@ -23,6 +23,19 @@ _DEFAULTS = {
     "fan_boost_rpm": "MAX",
     "language": "de",
     "temp_unit": "c",
+    # Auftrag "Monitor-Umschaltung" - additiv, Standard AUS. Die vier
+    # VCP-0x60-Rohwerte sind mit den beim Machbarkeitstest bestaetigten
+    # "verdoppelten" Dell/Alienware-Werten vorbelegt (HDMI1=4369,
+    # HDMI2=4626) - bei anderen Monitormarken i.d.R. die einfachen
+    # MCCS-Standardwerte (z.B. 17/18) stattdessen eintragen, siehe
+    # Menue "Monitor-Umschaltung...".
+    "monitor_switch_enabled": False,
+    "monitor_switch_screen_uuid": "",
+    "monitor_switch_screen_name": "",
+    "monitor_vcp_1": 4369,  # HDMI 1
+    "monitor_vcp_2": 4626,  # HDMI 2
+    "monitor_vcp_3": 3855,  # DisplayPort 1
+    "monitor_vcp_4": 4112,  # DisplayPort 2 (generischer Platzhalter, ungetestet)
 }
 
 # Gueltige Werte fuer "menubar_item" (Auftrag "waehlbarer Wert in der
@@ -146,6 +159,31 @@ def get_fan_boost_token():
     return _cfg.get("fan_boost_token")
 
 
+def get_last_cmd_counter():
+    """Schutz gegen Befehlswiederholung (Auftrag "Sicherheit und
+    Lizenzen", Teil 2) - zuletzt akzeptierter CYD-Befehlszaehler,
+    0 = noch nie ein signierter Befehl angenommen."""
+    return int(_cfg.get("last_cmd_counter", 0))
+
+
+def set_last_cmd_counter(value):
+    _cfg["last_cmd_counter"] = int(value)
+    _save()
+
+
+def get_allow_legacy_commands():
+    """Standard AUS (Auftrag) - nur fuer die kurze Uebergangszeit, falls
+    CYD-Firmware und Mac-App aus irgendeinem Grund NICHT gleichzeitig
+    aktualisiert wurden. Bei EIN akzeptiert fan_boost.py auch das alte,
+    unsignierte "<Befehl> <Token>"-Format OHNE Wiederholungsschutz."""
+    return bool(_cfg.get("allow_legacy_commands", False))
+
+
+def set_allow_legacy_commands(value):
+    _cfg["allow_legacy_commands"] = bool(value)
+    _save()
+
+
 def get_language():
     value = _cfg.get("language", "de")
     return value if value in LANGUAGES else "de"
@@ -167,4 +205,57 @@ def set_temp_unit(value):
     if value not in TEMP_UNITS:
         return
     _cfg["temp_unit"] = value
+    _save()
+
+
+# Auftrag "Monitor-Umschaltung" - siehe monitor_switch.py fuer die
+# eigentliche DDC-Logik, hier nur reine Einstellungs-Verwaltung.
+
+def get_monitor_switch_enabled():
+    return bool(_cfg.get("monitor_switch_enabled", False))
+
+
+def set_monitor_switch_enabled(value):
+    _cfg["monitor_switch_enabled"] = bool(value)
+    _save()
+
+
+def get_monitor_switch_screen_uuid():
+    """Leer = kein Bildschirm ausgewaehlt - monitor_switch.py tut dann
+    bewusst NICHTS (kein Fallback auf "irgendeinen"/"alle Bildschirme",
+    siehe Auftrag/Sicherheitsgrenze)."""
+    return _cfg.get("monitor_switch_screen_uuid", "") or ""
+
+
+def get_monitor_switch_screen_name():
+    """Nur fuer die Menue-Anzeige - die UUID oben ist die eigentliche,
+    verbindliche Auswahl."""
+    return _cfg.get("monitor_switch_screen_name", "") or ""
+
+
+def set_monitor_switch_screen(uuid, name):
+    _cfg["monitor_switch_screen_uuid"] = uuid or ""
+    _cfg["monitor_switch_screen_name"] = name or ""
+    _save()
+
+
+def get_monitor_vcp_value(logical_input):
+    """logical_input: 1=HDMI1, 2=HDMI2, 3=DisplayPort1, 4=DisplayPort2.
+    None bei ungueltigem Wert - Aufrufer MUSS das pruefen (kein Default-
+    Rateversuch, siehe Sicherheitsgrenze "nur die 4 erlaubten Werte")."""
+    if logical_input not in (1, 2, 3, 4):
+        return None
+    return int(_cfg.get(f"monitor_vcp_{logical_input}", _DEFAULTS[f"monitor_vcp_{logical_input}"]))
+
+
+def set_monitor_vcp_value(logical_input, value):
+    if logical_input not in (1, 2, 3, 4):
+        return
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return
+    if not (0 <= value <= 65535):
+        return
+    _cfg[f"monitor_vcp_{logical_input}"] = value
     _save()

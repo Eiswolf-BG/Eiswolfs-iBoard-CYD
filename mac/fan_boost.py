@@ -12,6 +12,8 @@ Zwei unabhaengige Wege koennen einen Boost anstossen:
   (siehe CydCommandListener) - Dauer/Drehzahl stehen direkt im Befehl,
   beide Wege sind bewusst unabhaengig von der Mac-Menue-Einstellung.
 """
+import hashlib
+import hmac as hmac_lib
 import json
 import re
 import socket
@@ -31,10 +33,47 @@ CYD_LINK_TIMEOUT_S = 60.0  # siehe FanBoostClient._run()
 RPM_LEVELS = ("2000", "3000", "4000", "MAX")
 DURATIONS = (30, 60, 120, 300, 600, 0)  # 0 = "Bis Stopp"
 
+# Alte, unsignierte Regexe - nur noch fuer den optionalen Legacy-Pfad
+# (config.get_allow_legacy_commands(), Standard AUS) gebraucht.
 _BOOST_RE = re.compile(r"^FAN BOOST (\d+) (2000|3000|4000|MAX) (\S+)$")
 _AUTO_RE = re.compile(r"^FAN AUTO (\S+)$")
 _SLEEP_RE = re.compile(r"^SLEEP (\S+)$")
 CYD_SLEEP_CMD_MIN_INTERVAL_S = 1.0
+# Auftrag "Monitor-Umschaltung" - mind. 3s zwischen zwei MONITOR-
+# Befehlen, siehe CLAUDE.md Sicherheitsgrenzen.
+MONITOR_CMD_MIN_INTERVAL_S = 3.0
+
+# Schutz gegen Befehlswiederholung (Auftrag "Sicherheit und Lizenzen",
+# Teil 2) - neues Format "<Befehl ...Argumente> <Zaehler> <HMAC>"
+# statt des bisherigen Klartext-Tokens am Zeilenende. Siehe
+# cyd/src/cmd_auth.cpp fuer die Gegenseite (identische Berechnung).
+HMAC_HEX_LEN = 16
+RESYNC_WINDOW_S = 60.0
+
+
+def _compute_hmac_hex(token, message):
+    digest = hmac_lib.new(token.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).hexdigest()
+    return digest[:HMAC_HEX_LEN]
+
+
+def _verify_signed(line, token):
+    """Prueft NUR die Signatur (Format + HMAC), NICHT die
+    Zaehler-Reihenfolge - das entscheidet der Aufrufer, da RESYNC
+    andere Regeln hat. Gibt bei Erfolg (nachricht, zaehler:int)
+    zurueck, sonst None."""
+    parts = line.rsplit(" ", 2)
+    if len(parts) != 3:
+        return None
+    message, counter_str, hmac_hex = parts
+    if not counter_str.isdigit():
+        return None
+    hmac_hex = hmac_hex.lower()
+    if len(hmac_hex) != HMAC_HEX_LEN or any(c not in "0123456789abcdef" for c in hmac_hex):
+        return None
+    expected = _compute_hmac_hex(token, f"{message} {counter_str}")
+    if not hmac_lib.compare_digest(expected, hmac_hex):
+        return None
+    return message, int(counter_str)
 
 
 def _log(msg):
@@ -204,21 +243,29 @@ class CydCommandListener:
     """Nimmt Befehle vom CYD entgegen - per UDP (eigener Port 4211,
     NICHT der Datenport) im Hintergrund-Thread, und per USB-Zeile
     (ueber handle_line(), von SenderThread aus usb_link.read_lines()
-    weitergereicht). Jeder Befehl braucht den gueltigen, gemeinsamen
-    Token (siehe secrets.h/config.json) - ungueltige/fehlende Token
-    sowie mehr als ein Befehl pro Sekunde werden kommentarlos ignoriert
-    (kein Fehler-Echo ans CYD). Urspruenglich nur fuer Luefter-Boost-
-    Befehle gedacht (Klassenname/Dateiname historisch), seit Auftrag
-    "Ruhemodus" auch fuer den SLEEP-Befehl zustaendig - EIN
-    gemeinsamer Listener auf demselben Port, statt eines zweiten
-    (der Port kann nur einmal gebunden werden)."""
+    weitergereicht). Urspruenglich nur fuer Luefter-Boost-Befehle
+    gedacht (Klassenname/Dateiname historisch), seit "Ruhemodus" auch
+    fuer SLEEP zustaendig - EIN gemeinsamer Listener auf demselben
+    Port, statt eines zweiten (der Port kann nur einmal gebunden
+    werden).
 
-    def __init__(self, on_boost, on_auto, on_sleep=None):
+    Schutz gegen Befehlswiederholung (Auftrag "Sicherheit und
+    Lizenzen", Teil 2): jeder Befehl braucht ab jetzt einen steigenden
+    Zaehler + eine gueltige HMAC-Pruefsumme statt des bisherigen
+    Klartext-Tokens (siehe _verify_signed() oben, Gegenseite in
+    cyd/src/cmd_auth.cpp). Ungueltige Signatur, zu alter/wiederholter
+    Zaehler, sowie mehr als ein Befehl pro Sekunde werden kommentarlos
+    ignoriert (kein Fehler-Echo ans CYD, verrät einem Angreifer nichts)."""
+
+    def __init__(self, on_boost, on_auto, on_sleep=None, on_monitor=None):
         self.on_boost = on_boost
         self.on_auto = on_auto
         self.on_sleep = on_sleep
+        self.on_monitor = on_monitor
         self._last_cmd_monotonic = 0.0
         self._last_sleep_cmd_monotonic = 0.0
+        self._last_monitor_cmd_monotonic = 0.0
+        self._resync_until_monotonic = 0.0
         self._sock = None
         self._stop = False
         self._thread = threading.Thread(target=self._udp_loop, daemon=True)
@@ -231,6 +278,15 @@ class CydCommandListener:
                 self._sock.close()
             except Exception:
                 pass
+
+    def allow_resync(self, seconds=RESYNC_WINDOW_S):
+        """Oeffnet ein zeitlich begrenztes Fenster, in dem ein gueltig
+        signierter "RESYNC"-Befehl den gespeicherten Zaehler auf einen
+        NEUEN Wert setzen darf, OHNE dass er hoeher als der bisherige
+        sein muss (Auftrag 2b - fuer den Fall, dass das CYD seinen
+        eigenen Zaehler verloren hat, z.B. nach einem Werksreset).
+        Aufgerufen vom neuen Mac-Menuepunkt, siehe sender.py."""
+        self._resync_until_monotonic = time.monotonic() + seconds
 
     def _udp_loop(self):
         try:
@@ -256,18 +312,105 @@ class CydCommandListener:
     def handle_line(self, line):
         """Von aussen auch direkt fuer USB-Zeilen aufgerufen (siehe
         sender.py::SenderThread.run())."""
+        token = config.get_fan_boost_token()
+        if not token:
+            return
+
+        verified = _verify_signed(line, token)
+        if verified is not None:
+            message, counter = verified
+            if message == "RESYNC":
+                if time.monotonic() > self._resync_until_monotonic:
+                    return  # Resync-Fenster nicht offen - stillschweigend ignorieren
+                config.set_last_cmd_counter(counter)
+                self._resync_until_monotonic = 0.0  # einmalig, Fenster danach sofort schliessen
+                return
+            if counter <= config.get_last_cmd_counter():
+                return  # Wiederholung oder veralteter Zaehler
+            config.set_last_cmd_counter(counter)
+            self._dispatch(message)
+            return
+
+        # Kein gueltig signierter Befehl - nur bei explizit aktiviertem
+        # Legacy-Schalter (Standard AUS) auf das alte, unsignierte
+        # Format zurueckfallen (KEIN Wiederholungsschutz dabei!).
+        if config.get_allow_legacy_commands():
+            self._handle_legacy(line, token)
+
+    def _dispatch(self, message):
+        """Fuehrt einen bereits ERFOLGREICH signaturgeprueften Befehl
+        aus - die Ratenbegrenzung bleibt zusaetzlich als zweite,
+        unabhaengige Sicherheitsebene bestehen (Verteidigung in der
+        Tiefe), auch wenn der Zaehler Wiederholungen eigentlich schon
+        verhindert."""
+        now = time.monotonic()
+        if message.startswith("FAN "):
+            if now - self._last_cmd_monotonic < CYD_CMD_MIN_INTERVAL_S:
+                return
+            parts = message.split(" ")
+            if parts[:2] == ["FAN", "BOOST"] and len(parts) == 4:
+                seconds_str, rpm_level = parts[2], parts[3]
+                if rpm_level not in RPM_LEVELS:
+                    return
+                try:
+                    seconds = int(seconds_str)
+                except ValueError:
+                    return
+                if seconds != 0 and not (10 <= seconds <= 3600):
+                    return
+                self._last_cmd_monotonic = now
+                self.on_boost(seconds, rpm_level)
+            elif message == "FAN AUTO":
+                self._last_cmd_monotonic = now
+                self.on_auto()
+        elif message == "SLEEP":
+            if self.on_sleep is None:
+                return
+            if now - self._last_sleep_cmd_monotonic < CYD_SLEEP_CMD_MIN_INTERVAL_S:
+                return
+            self._last_sleep_cmd_monotonic = now
+            self.on_sleep()
+        elif message.startswith("MONITOR "):
+            # Auftrag "Monitor-Umschaltung" - logischer Eingang 1-4
+            # (siehe monitor_switch.py fuer die Zuordnung zu VCP-0x60-
+            # Rohwerten). Eigene, von der CYD-3s-Geraetesperre
+            # UNABHAENGIGE Ratenbegrenzung (Verteidigung in der Tiefe -
+            # Alexa liefert denselben Befehl laut Auftrag manchmal
+            # doppelt zu).
+            if self.on_monitor is None:
+                return
+            if now - self._last_monitor_cmd_monotonic < MONITOR_CMD_MIN_INTERVAL_S:
+                return
+            parts = message.split(" ")
+            if len(parts) != 2 or not parts[1].isdigit():
+                return
+            value = int(parts[1])
+            if value not in (1, 2, 3, 4):
+                return
+            self._last_monitor_cmd_monotonic = now
+            self.on_monitor(value)
+
+    def _handle_legacy(self, line, token):
+        """Alter, unsignierter Pfad (Auftrag 2b: "nur wenn Alex das
+        ausdruecklich einschaltet") - 1:1 das bisherige Verhalten,
+        OHNE jeden Wiederholungsschutz. Nur fuer eine kurze
+        Uebergangszeit gedacht, falls CYD-Firmware und Mac-App
+        ausnahmsweise nicht gleichzeitig aktualisiert wurden."""
         if line.startswith("SLEEP "):
-            self._handle_sleep(line)
+            now = time.monotonic()
+            if now - self._last_sleep_cmd_monotonic < CYD_SLEEP_CMD_MIN_INTERVAL_S:
+                return
+            m = _SLEEP_RE.match(line)
+            if not m or m.group(1) != token or self.on_sleep is None:
+                return
+            self._last_sleep_cmd_monotonic = now
+            self.on_sleep()
             return
         if not line.startswith("FAN "):
             return
         now = time.monotonic()
         if now - self._last_cmd_monotonic < CYD_CMD_MIN_INTERVAL_S:
             return
-        token = config.get_fan_boost_token()
-        if not token:
-            return
-
         m = _BOOST_RE.match(line)
         if m:
             seconds_str, rpm_level, got_token = m.groups()
@@ -279,32 +422,9 @@ class CydCommandListener:
             self._last_cmd_monotonic = now
             self.on_boost(seconds, rpm_level)
             return
-
         m = _AUTO_RE.match(line)
         if m:
-            got_token = m.group(1)
-            if got_token != token:
+            if m.group(1) != token:
                 return
             self._last_cmd_monotonic = now
             self.on_auto()
-
-    def _handle_sleep(self, line):
-        """Eigene, von FAN-Befehlen unabhaengige Ratenbegrenzung (Auftrag:
-        hoechstens ein SLEEP-Befehl pro Sekunde) - nutzt dasselbe Token
-        wie der Luefter-Boost (config.get_fan_boost_token()), keine
-        zweite Geheimnis-Datei."""
-        if self.on_sleep is None:
-            return
-        now = time.monotonic()
-        if now - self._last_sleep_cmd_monotonic < CYD_SLEEP_CMD_MIN_INTERVAL_S:
-            return
-        token = config.get_fan_boost_token()
-        if not token:
-            return
-        m = _SLEEP_RE.match(line)
-        if not m:
-            return
-        if m.group(1) != token:
-            return
-        self._last_sleep_cmd_monotonic = now
-        self.on_sleep()

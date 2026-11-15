@@ -1,0 +1,10 @@
+Python (CPython runtime bundled into the Mac app by PyInstaller) - PSF License
+
+The Mac app ("Eiswolfs iBoard.app") is a PyInstaller bundle and therefore
+contains a copy of the unmodified CPython runtime and its standard library.
+CPython is licensed under the Python Software Foundation License Version 2,
+which allows redistribution of unmodified and modified copies as long as the
+PSF copyright notice and license text are included:
+
+https://docs.python.org/3/license.html
+https://github.com/python/cpython/blob/main/LICENSE

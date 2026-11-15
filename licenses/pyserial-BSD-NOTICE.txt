@@ -1,0 +1,8 @@
+pyserial - BSD License
+
+This copy of Eiswolfs iBoard does not bundle a local copy of pyserial's
+exact license text (not included in the installed package metadata on
+the build machine). pyserial is distributed under a BSD-style license;
+see the project's own repository for the authoritative, current text:
+
+https://github.com/pyserial/pyserial/blob/master/LICENSE.txt

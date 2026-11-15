@@ -19,6 +19,8 @@ namespace SetupFlow {
 
     // Allgemeine Texteingabe ueber die vorhandene Bildschirmtastatur
     // (Auftrag "Wake-on-LAN") - liefert den eingegebenen Text, cancelled
-    // = true, falls der Nutzer abgebrochen hat.
-    String runTextEntry(TFT_eSPI& tft, const char* title, bool& cancelled);
+    // = true, falls der Nutzer abgebrochen hat. "initialText" (Auftrag
+    // "Modularer Listener") belegt das Feld beim Oeffnen vor, z.B. zum
+    // Korrigieren eines bestehenden Wertes statt alles neu einzutippen.
+    String runTextEntry(TFT_eSPI& tft, const char* title, bool& cancelled, const char* initialText = "");
 }
